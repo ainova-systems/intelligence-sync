@@ -1,8 +1,18 @@
 # intelligence-sync: Initialize Your Project
 
-The sync engine is already installed in `intelligence/scripts/`. Your job: analyze this codebase, ask the user targeted questions, and generate the project-specific configuration and content.
+The sync engine is already installed in this directory's `scripts/` subfolder. Your job: analyze this codebase, ask the user targeted questions, and generate the project-specific configuration and content.
 
 **Execute phases sequentially. Do not skip or combine phases. Each phase has a gate — wait for it before proceeding.**
+
+## Phase 0: detect the source folder name
+
+This document is read by an AI agent and contains many literal references to `intelligence/` (lowercase). The folder you are reading from may have been **renamed** by the user (e.g. `Intelligence/`, `prompts/`, a project codename). Before doing anything else:
+
+1. Identify the directory that contains this `INIT.md` and a `scripts/sync.sh` file. Call its basename `<intel>`.
+2. Throughout the rest of this document, every reference to `intelligence/` means `<intel>/` — substitute it consistently in every path you write (`config.yaml` `sources:`, `targets.agents.header` Markdown links, generated content, skill instructions).
+3. Do NOT create a second folder named `intelligence/` if `<intel>` is already different. The sync engine is folder-name-agnostic — `bash <intel>/scripts/sync.sh` works regardless of casing or naming.
+
+If the user has not renamed it, `<intel>` is `intelligence` and the literal text below applies as-is.
 
 ## What You Will Generate
 

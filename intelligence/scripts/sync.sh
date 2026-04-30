@@ -14,7 +14,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INTELLIGENCE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || (cd "$INTELLIGENCE_DIR/.." && pwd))}"
+# Normalize REPO_ROOT to the same `cd && pwd` style as INTELLIGENCE_DIR so
+# prefix-stripping in path comparisons works (Git Bash on Windows: git
+# rev-parse returns `D:/...` while cd && pwd returns `/d/...`; the styles
+# do not match without normalization).
+REPO_ROOT_RAW="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || (cd "$INTELLIGENCE_DIR/.." && pwd))}"
+REPO_ROOT="$(cd "$REPO_ROOT_RAW" && pwd)"
+unset REPO_ROOT_RAW
 
 # Config: explicit env > config.yaml in intelligence folder
 if [ -n "${CONFIG_FILE:-}" ]; then

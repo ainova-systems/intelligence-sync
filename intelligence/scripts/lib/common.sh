@@ -263,9 +263,14 @@ map_access_to_claude_disallowed() {
 
 # Refuse to operate on output paths that could clobber repo content.
 # Adapters call `rm -rf` on subdirectories of $output_dir; if config.yaml
-# accidentally points an adapter at the repo root, the source `intelligence/`
-# tree, or any configured source directory, that cleanup would delete real
-# work. Call this from sync.sh before invoking each adapter.
+# accidentally points an adapter at the repo root, the intelligence source
+# tree (whatever the user named it), or any configured source directory,
+# that cleanup would delete real work. Call this from sync.sh before
+# invoking each adapter.
+#
+# All forbidden paths are derived dynamically — no folder name is
+# hardcoded, so projects that renamed `intelligence/` (capital I, custom
+# name) are protected the same way.
 #
 # Exits 1 with a clear message on rejection.
 # Usage: validate_output_path "$REPO_ROOT" "$CONFIG_FILE" "$adapter" "$output_dir"
@@ -275,7 +280,7 @@ validate_output_path() {
     local adapter="$3"
     local output_dir="$4"
 
-    # Empty / dotted paths
+    # Empty / dotted paths.
     case "$output_dir" in
         ""|"."|"/"|"./"|"$repo_root"|"$repo_root/"|"$repo_root/.")
             echo "ERROR: targets.$adapter.output resolves to repo root or empty path: '$output_dir'" >&2
@@ -293,15 +298,22 @@ validate_output_path() {
         exit 1
     fi
 
-    # Reject the source intelligence/ tree and any configured source paths.
     local rel="${output_dir#$repo_root/}"
-    case "$rel" in
-        intelligence|intelligence/|intelligence/*)
-            echo "ERROR: targets.$adapter.output points into intelligence/ source tree: '$rel'" >&2
-            echo "  Adapter cleanup would delete rules / agents / skills source files." >&2
-            exit 1
-            ;;
-    esac
+
+    # Reject the intelligence source directory itself (parent of config.yaml).
+    # Folder name is whatever the user chose — we read it from the filesystem.
+    local intel_dir intel_rel
+    intel_dir="$(cd "$(dirname "$config_file")" && pwd)"
+    intel_rel="${intel_dir#$repo_root/}"
+    if [ -n "$intel_rel" ]; then
+        case "$rel" in
+            "$intel_rel"|"$intel_rel/"|"$intel_rel"/*)
+                echo "ERROR: targets.$adapter.output points into the intelligence source tree ('$intel_rel'): '$rel'" >&2
+                echo "  Adapter cleanup would delete rules / agents / skills source files." >&2
+                exit 1
+                ;;
+        esac
+    fi
 
     # Reject any configured source directory (rules, agents, skills).
     local section src
@@ -320,13 +332,16 @@ validate_output_path() {
 }
 
 # Warn about prompt directories not listed in sources.
-# Scans for directories matching **/intelligence/ or **/prompts/ that contain
-# rules/, agents/, or skills/ subdirectories not covered by config.
+# Scans for `rules/` / `agents/` / `skills/` directories anywhere under the
+# intelligence source tree and any sibling tree with the same basename
+# (e.g. nested per-component intelligence folders). Anything found that is
+# not in `sources.*` is flagged. No folder name is hardcoded — the
+# intelligence directory is whatever holds `config.yaml`.
 warn_unsynced() {
     local repo_root="$1"
     local config_file="$2"
 
-    # Collect all configured source paths
+    # Collect all configured source paths.
     local all_sources=()
     for section in rules agents skills; do
         while IFS= read -r src; do
@@ -335,31 +350,33 @@ warn_unsynced() {
         done < <(read_yaml_list "$config_file" "$section")
     done
 
-    # Collect ignore patterns
+    # Collect ignore + submodule patterns.
     local ignores=()
     while IFS= read -r ign; do
         [ -z "$ign" ] && continue
         ignores+=("$ign")
     done < <(read_yaml_list "$config_file" "ignore")
-
-    # Collect submodule patterns
     while IFS= read -r sub; do
         [ -z "$sub" ] && continue
         ignores+=("$sub")
     done < <(read_yaml_list "$config_file" "submodules")
 
+    # Derive the intelligence folder basename from config.yaml's location —
+    # whatever the user named it (`intelligence`, `Intelligence`, `prompts`).
+    local intel_basename
+    intel_basename="$(basename "$(dirname "$config_file")")"
+
     local warnings=0
 
-    # Find directories named rules/agents/skills inside intelligence/ or prompts/ parents
     while IFS= read -r found_dir; do
         local rel_dir="${found_dir#$repo_root/}"
 
-        # Skip output directories and common excludes
+        # Skip generated output directories and common excludes.
         case "$rel_dir" in
-            .claude/*|.cursor/*|.github/*|*/node_modules/*|*/vendor/*|*/dist/*) continue ;;
+            .claude/*|.cursor/*|.github/*|.codex/*|.agents/*|*/node_modules/*|*/vendor/*|*/dist/*) continue ;;
         esac
 
-        # Skip ignore/submodule patterns
+        # Skip ignore/submodule patterns.
         local skip=false
         for ign in "${ignores[@]+"${ignores[@]}"}"; do
             case "$rel_dir" in
@@ -368,7 +385,16 @@ warn_unsynced() {
         done
         [ "$skip" = true ] && continue
 
-        # Check if directory has content worth syncing
+        # Only flag directories whose ancestry includes a folder with the
+        # same basename as the intelligence source dir (so we catch
+        # `Intelligence/rules`, `apps/billing/intelligence/rules`, etc.,
+        # but not unrelated `rules/` / `agents/` directories elsewhere).
+        case "/$rel_dir/" in
+            *"/$intel_basename/"*) ;;
+            *) continue ;;
+        esac
+
+        # Check if directory has content worth syncing.
         local has_content=false
         if [ -n "$(find "$found_dir" -maxdepth 1 -name '*.md' 2>/dev/null | head -1)" ]; then
             has_content=true
@@ -378,7 +404,7 @@ warn_unsynced() {
         fi
         [ "$has_content" = false ] && continue
 
-        # Check if this directory is in any source array
+        # Check if this directory is in any source array.
         local matched=false
         for src in "${all_sources[@]+"${all_sources[@]}"}"; do
             if [ "$rel_dir" = "$src" ]; then
@@ -395,7 +421,7 @@ warn_unsynced() {
             echo "  NOT SYNCED: $rel_dir"
             warnings=$((warnings + 1))
         fi
-    done < <(find "$repo_root" -type d \( -name "Rules" -o -name "Skills" -o -name "Agents" -o -name "rules" -o -name "skills" -o -name "agents" \) \( -path "*[Ii]ntelligence*" -o -path "*[Pp]rompts*" \) 2>/dev/null)
+    done < <(find "$repo_root" -type d \( -name "rules" -o -name "agents" -o -name "skills" -o -name "Rules" -o -name "Agents" -o -name "Skills" \) 2>/dev/null)
 
     if [ $warnings -gt 0 ]; then
         echo "  Add these paths to sources: in $(basename "$config_file")"
