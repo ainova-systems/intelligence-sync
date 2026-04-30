@@ -1,0 +1,607 @@
+#!/bin/bash
+# intelligence-sync: Core library functions
+# Source this file — never execute directly.
+#
+# Usage: source "$(dirname "$0")/lib/common.sh"
+
+# --- File Utilities ---
+
+# Convert CRLF to LF in a file (safe for Windows/Git Bash)
+normalize_file_to_lf() {
+    local target="$1"
+    local tmp_file="$target.tmp"
+    awk '{ sub(/\r$/, ""); print }' "$target" > "$tmp_file"
+    mv "$tmp_file" "$target"
+}
+
+# Escape a string for safe interpolation into a TOML basic string ("..").
+# Backslash and double-quote are escaped; control chars stripped.
+toml_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    # Strip any literal newline / carriage return — TOML basic strings
+    # do not allow them; multi-line content belongs in `"""..."""`.
+    s="${s//$'\n'/ }"
+    s="${s//$'\r'/}"
+    printf '%s' "$s"
+}
+
+# Escape a string for safe interpolation into a YAML double-quoted scalar.
+yaml_dq_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/ }"
+    s="${s//$'\r'/}"
+    printf '%s' "$s"
+}
+
+# Lint YAML frontmatter for common pitfalls (unquoted colons, leading tabs).
+# Print warnings to stderr; do not fail. Strict consumers (Codex CLI) reject
+# these files with cryptic messages — catching them in sync gives better DX.
+# Usage: lint_frontmatter "path/to/file.md"
+lint_frontmatter() {
+    local file="$1"
+    awk -v f="$file" '
+        BEGIN { in_fm = 0; line = 0 }
+        { sub(/\r$/, ""); line++ }
+        line == 1 && $0 != "---" { exit }
+        line == 1 { in_fm = 1; next }
+        in_fm && $0 == "---" { exit }
+        in_fm && /^\t/ {
+            printf "  WARN: %s:%d leading tab in frontmatter (use spaces)\n", f, line > "/dev/stderr"
+        }
+        in_fm && /^[a-zA-Z0-9_-]+:[[:space:]]+[^"\047|>[{]/ {
+            value_start = index($0, ":") + 1
+            value = substr($0, value_start)
+            sub(/^[[:space:]]+/, "", value)
+            if (value ~ /:[[:space:]]/ || value ~ /:$/) {
+                col = index(value, ":") + value_start
+                printf "  WARN: %s:%d unquoted colon in value at column %d — wrap value in quotes\n", f, line, col > "/dev/stderr"
+            }
+        }
+    ' "$file"
+}
+
+# --- Frontmatter Parsing ---
+
+# Extract a single value from YAML frontmatter by key.
+# Splits on the FIRST colon only, so values containing additional colons
+# (e.g. `description: "Use when: fixing APIs"`) are preserved. Reads only
+# inside the first `---` ... `---` frontmatter block; body content is ignored.
+# Strips surrounding double or single quotes from the value.
+# Usage: get_frontmatter_value "tier" "path/to/file.md"
+get_frontmatter_value() {
+    local key="$1"
+    local file="$2"
+    awk -v k="$key" '
+        { sub(/\r$/, "") }
+        NR == 1 && $0 != "---" { exit }
+        NR == 1 { in_fm = 1; next }
+        in_fm && $0 == "---" { exit }
+        !in_fm { next }
+
+        {
+            idx = index($0, ":")
+            if (idx == 0) next
+            line_key = substr($0, 1, idx - 1)
+            if (line_key != k) next
+            val = substr($0, idx + 1)
+            sub(/^[[:space:]]+/, "", val)
+            sub(/[[:space:]]+$/, "", val)
+            n = length(val)
+            if (n >= 2) {
+                first = substr(val, 1, 1)
+                last = substr(val, n, 1)
+                if ((first == "\"" && last == "\"") || (first == "\047" && last == "\047")) {
+                    val = substr(val, 2, n - 2)
+                }
+            }
+            print val
+            exit
+        }
+    ' "$file"
+}
+
+# Check if a file starts with YAML frontmatter (---)
+has_frontmatter() {
+    local file="$1"
+    awk 'NR==1 { sub(/\r$/, ""); if ($0 == "---") print 1; else print 0; exit }' "$file"
+}
+
+# Check if a file has a paths: field in frontmatter.
+# Scoped to the first `---` ... `---` block — body content like a code
+# example referencing `paths: foo` will not be miscounted.
+has_paths() {
+    local file="$1"
+    awk '
+        { sub(/\r$/, "") }
+        NR == 1 && $0 != "---" { print 0; done=1; exit }
+        NR == 1 { in_fm = 1; next }
+        in_fm && $0 == "---" { print c+0; done=1; exit }
+        in_fm && /^paths:/ { c++ }
+        END { if (!done) print c+0 }
+    ' "$file"
+}
+
+# --- Tier/Access Mappings ---
+
+# Hardcoded defaults: ide:tier -> model name.
+# When you bump these, run `bash intelligence/scripts/sync.sh` in projects;
+# any project whose config.yaml `models:` section diverges from these will
+# print a drift warning so users know their override is now stale.
+get_model_default() {
+    local ide="$1"
+    local tier="$2"
+    case "$ide:$tier" in
+        claude:heavy)     echo "opus" ;;
+        claude:standard)  echo "sonnet" ;;
+        claude:light)     echo "haiku" ;;
+        cursor:heavy)     echo "inherit" ;;
+        cursor:standard)  echo "inherit" ;;
+        cursor:light)     echo "fast" ;;
+        copilot:heavy)    echo "gpt-5.5" ;;
+        copilot:standard) echo "gpt-5.5-codex" ;;
+        copilot:light)    echo "gpt-5.5-mini" ;;
+        codex:heavy)      echo "gpt-5.5" ;;
+        codex:standard)   echo "gpt-5.5-codex" ;;
+        codex:light)      echo "gpt-5.5-mini" ;;
+        *)                echo "" ;;
+    esac
+}
+
+# Read a nested key from config.yaml: section -> sub -> key.
+# Used to resolve `models.<ide>.<tier>` overrides.
+get_nested_yaml_value() {
+    local file="$1"
+    local section="$2"
+    local sub="$3"
+    local key="$4"
+    awk -v section="$section" -v subname="$sub" -v key="$key" '
+        { sub(/\r$/, "") }
+        $0 ~ "^" section ":[[:space:]]*$" { in_section=1; in_sub=0; next }
+        in_section && /^[a-zA-Z]/ && $0 !~ "^" section ":" { in_section=0; in_sub=0 }
+        in_section && $0 ~ "^  " subname ":[[:space:]]*$" { in_sub=1; next }
+        in_section && in_sub && /^  [a-zA-Z]/ { in_sub=0 }
+        in_section && in_sub && $0 ~ "^    " key ":" {
+            val = $0
+            sub(/.*:[[:space:]]*["\047]?/, "", val)
+            sub(/["\047]?[[:space:]]*$/, "", val)
+            print val
+            exit
+        }
+    ' "$file"
+}
+
+# Resolve a model: config.yaml `models:` override wins, otherwise default.
+# Usage: get_model "$CONFIG_FILE" "claude" "$tier"
+get_model() {
+    local config_file="$1"
+    local ide="$2"
+    local tier="${3:-heavy}"
+    local override
+    if [ -n "$config_file" ] && [ -f "$config_file" ]; then
+        override=$(get_nested_yaml_value "$config_file" "models" "$ide" "$tier")
+    fi
+    if [ -n "${override:-}" ]; then
+        echo "$override"
+    else
+        get_model_default "$ide" "$tier"
+    fi
+}
+
+# Print info message for each model override that differs from the
+# hardcoded default. Helps users notice when a script update brings new
+# defaults that their config still overrides with the old value.
+# One awk pass extracts every `<ide>.<tier>=<value>` triple under `models:`;
+# comparison against defaults happens in shell.
+report_model_drift() {
+    local config_file="$1"
+    [ -f "$config_file" ] || return 0
+
+    local triples
+    triples=$(awk '
+        { sub(/\r$/, "") }
+        /^models:[[:space:]]*$/ { in_models=1; next }
+        in_models && /^[a-zA-Z]/ { in_models=0; in_ide="" }
+        in_models && /^  [a-zA-Z][a-zA-Z0-9_-]*:[[:space:]]*$/ {
+            line=$0
+            sub(/^  /, "", line); sub(/:[[:space:]]*$/, "", line)
+            in_ide=line
+            next
+        }
+        in_models && in_ide && /^    [a-zA-Z][a-zA-Z0-9_-]*:/ {
+            line=$0; sub(/^    /, "", line)
+            key=line; sub(/:.*/, "", key)
+            val=line; sub(/[^:]+:[[:space:]]*/, "", val)
+            gsub(/^["\047]|["\047][[:space:]]*$/, "", val)
+            print in_ide "\t" key "\t" val
+        }
+    ' "$config_file")
+
+    [ -z "$triples" ] && return 0
+
+    local printed_header=0
+    while IFS=$'\t' read -r ide tier from_config; do
+        [ -z "$from_config" ] && continue
+        local default
+        default=$(get_model_default "$ide" "$tier")
+        [ "$from_config" = "$default" ] && continue
+        if [ $printed_header -eq 0 ]; then
+            echo ""
+            echo "=== Model overrides (config.yaml differs from intelligence-sync defaults) ==="
+            printed_header=1
+        fi
+        printf "  %-8s %-9s config=%-20s default=%s\n" "$ide" "$tier" "\"$from_config\"" "\"$default\""
+    done <<< "$triples"
+
+    if [ $printed_header -eq 1 ]; then
+        echo "  (To accept new defaults: remove the entry from config.yaml \`models:\` section.)"
+    fi
+}
+
+# Map access level to Claude tools string
+map_access_to_claude_tools() {
+    local access="$1"
+    case "$access" in
+        readonly) echo "Read, Grep, Glob, Bash" ;;
+        *)        echo "Read, Write, Edit, Glob, Grep, Bash, Agent" ;;
+    esac
+}
+
+# Map access level to Claude disallowedTools (empty if full access)
+map_access_to_claude_disallowed() {
+    local access="$1"
+    case "$access" in
+        readonly) echo "Write, Edit" ;;
+        *)        echo "" ;;
+    esac
+}
+
+# --- Validation ---
+
+# Refuse to operate on output paths that could clobber repo content.
+# Adapters call `rm -rf` on subdirectories of $output_dir; if config.yaml
+# accidentally points an adapter at the repo root, the source `intelligence/`
+# tree, or any configured source directory, that cleanup would delete real
+# work. Call this from sync.sh before invoking each adapter.
+#
+# Exits 1 with a clear message on rejection.
+# Usage: validate_output_path "$REPO_ROOT" "$CONFIG_FILE" "$adapter" "$output_dir"
+validate_output_path() {
+    local repo_root="$1"
+    local config_file="$2"
+    local adapter="$3"
+    local output_dir="$4"
+
+    # Empty / dotted paths
+    case "$output_dir" in
+        ""|"."|"/"|"./"|"$repo_root"|"$repo_root/"|"$repo_root/.")
+            echo "ERROR: targets.$adapter.output resolves to repo root or empty path: '$output_dir'" >&2
+            echo "  Refusing to run — adapter cleanup would destroy repository content." >&2
+            exit 1
+            ;;
+    esac
+
+    # Resolve to canonical path. If the resolved output equals or is an
+    # ancestor of the repo root, refuse.
+    local resolved
+    resolved=$(cd "$output_dir" 2>/dev/null && pwd) || resolved=""
+    if [ -n "$resolved" ] && [ "$resolved" = "$repo_root" ]; then
+        echo "ERROR: targets.$adapter.output resolves to repo root: '$output_dir'" >&2
+        exit 1
+    fi
+
+    # Reject the source intelligence/ tree and any configured source paths.
+    local rel="${output_dir#$repo_root/}"
+    case "$rel" in
+        intelligence|intelligence/|intelligence/*)
+            echo "ERROR: targets.$adapter.output points into intelligence/ source tree: '$rel'" >&2
+            echo "  Adapter cleanup would delete rules / agents / skills source files." >&2
+            exit 1
+            ;;
+    esac
+
+    # Reject any configured source directory (rules, agents, skills).
+    local section src
+    for section in rules agents skills; do
+        while IFS= read -r src; do
+            [ -z "$src" ] && continue
+            case "$rel" in
+                "$src"|"$src/"|"$src"/*)
+                    echo "ERROR: targets.$adapter.output ('$rel') overlaps a configured source ('$src')." >&2
+                    echo "  Adapter cleanup would delete source content." >&2
+                    exit 1
+                    ;;
+            esac
+        done < <(read_yaml_list "$config_file" "$section")
+    done
+}
+
+# Warn about prompt directories not listed in sources.
+# Scans for directories matching **/intelligence/ or **/prompts/ that contain
+# rules/, agents/, or skills/ subdirectories not covered by config.
+warn_unsynced() {
+    local repo_root="$1"
+    local config_file="$2"
+
+    # Collect all configured source paths
+    local all_sources=()
+    for section in rules agents skills; do
+        while IFS= read -r src; do
+            [ -z "$src" ] && continue
+            all_sources+=("$src")
+        done < <(read_yaml_list "$config_file" "$section")
+    done
+
+    # Collect ignore patterns
+    local ignores=()
+    while IFS= read -r ign; do
+        [ -z "$ign" ] && continue
+        ignores+=("$ign")
+    done < <(read_yaml_list "$config_file" "ignore")
+
+    # Collect submodule patterns
+    while IFS= read -r sub; do
+        [ -z "$sub" ] && continue
+        ignores+=("$sub")
+    done < <(read_yaml_list "$config_file" "submodules")
+
+    local warnings=0
+
+    # Find directories named rules/agents/skills inside intelligence/ or prompts/ parents
+    while IFS= read -r found_dir; do
+        local rel_dir="${found_dir#$repo_root/}"
+
+        # Skip output directories and common excludes
+        case "$rel_dir" in
+            .claude/*|.cursor/*|.github/*|*/node_modules/*|*/vendor/*|*/dist/*) continue ;;
+        esac
+
+        # Skip ignore/submodule patterns
+        local skip=false
+        for ign in "${ignores[@]+"${ignores[@]}"}"; do
+            case "$rel_dir" in
+                "$ign"/*|*/"$ign"/*) skip=true; break ;;
+            esac
+        done
+        [ "$skip" = true ] && continue
+
+        # Check if directory has content worth syncing
+        local has_content=false
+        if [ -n "$(find "$found_dir" -maxdepth 1 -name '*.md' 2>/dev/null | head -1)" ]; then
+            has_content=true
+        fi
+        if [ -n "$(find "$found_dir" -maxdepth 2 -name 'SKILL.md' 2>/dev/null | head -1)" ]; then
+            has_content=true
+        fi
+        [ "$has_content" = false ] && continue
+
+        # Check if this directory is in any source array
+        local matched=false
+        for src in "${all_sources[@]+"${all_sources[@]}"}"; do
+            if [ "$rel_dir" = "$src" ]; then
+                matched=true
+                break
+            fi
+        done
+
+        if [ "$matched" = false ]; then
+            if [ $warnings -eq 0 ]; then
+                echo ""
+                echo "=== WARNING: Unsynced directories ==="
+            fi
+            echo "  NOT SYNCED: $rel_dir"
+            warnings=$((warnings + 1))
+        fi
+    done < <(find "$repo_root" -type d \( -name "Rules" -o -name "Skills" -o -name "Agents" -o -name "rules" -o -name "skills" -o -name "agents" \) \( -path "*[Ii]ntelligence*" -o -path "*[Pp]rompts*" \) 2>/dev/null)
+
+    if [ $warnings -gt 0 ]; then
+        echo "  Add these paths to sources: in $(basename "$config_file")"
+    fi
+}
+
+# --- Config Parsing ---
+
+# Read a simple list from config.yaml
+# Format: key:\n  - "value1"\n  - "value2"
+# Usage: readarray -t arr < <(read_yaml_list "config.yaml" "rules")
+read_yaml_list() {
+    local file="$1"
+    local section="$2"
+    awk -v section="$section" '
+        {
+            sub(/\r$/, "")
+        }
+        /^[a-z]/ { current_section = ""; depth = 0 }
+        /^  [a-z]/ { current_section = ""; depth = 0 }
+        $0 ~ "^" section ":" { current_section = section; depth = 0; next }
+        $0 ~ "^  " section ":" { current_section = section; depth = 2; next }
+        current_section == section && depth == 0 && /^  - / {
+            val = $0
+            sub(/^  - /, "", val)
+            gsub(/["\047]/, "", val)
+            print val
+        }
+        current_section == section && depth == 2 && /^    - / {
+            val = $0
+            sub(/^    - /, "", val)
+            gsub(/["\047]/, "", val)
+            print val
+        }
+    ' "$file"
+}
+
+# Check if a target is enabled in config.yaml (scoped to targets: section)
+# Usage: is_target_enabled "config.yaml" "claude"
+is_target_enabled() {
+    local file="$1"
+    local target="$2"
+    awk -v target="$target" '
+        { sub(/\r$/, "") }
+
+        # Enter/leave the targets: section
+        /^targets:[[:space:]]*$/ { in_targets = 1; next }
+        /^[a-zA-Z]/ { in_targets = 0 }
+
+        in_targets && $0 ~ "^  " target ":" {
+            if ($0 ~ /enabled:[[:space:]]*true/) { print 1; exit }
+            if ($0 ~ /enabled:[[:space:]]*false/) { print 0; exit }
+            in_target = 1; next
+        }
+        in_target && /enabled:/ {
+            if ($0 ~ /true/) { print 1 } else { print 0 }
+            exit
+        }
+        in_target && /^  [a-zA-Z]/ { print 0; exit }
+    ' "$file"
+}
+
+# Get an arbitrary field from a target's config block.
+# Handles both inline (`claude: { enabled: true, output: ".claude" }`)
+# and block form. Uses POSIX awk only — no gawk-specific 3-arg match().
+# Usage: get_target_field "config.yaml" "claude" "output"
+get_target_field() {
+    local file="$1"
+    local target="$2"
+    local field="$3"
+    awk -v target="$target" -v field="$field" '
+        { sub(/\r$/, "") }
+        /^targets:[[:space:]]*$/ { in_targets = 1; next }
+        /^[a-zA-Z]/ { in_targets = 0 }
+
+        in_targets && $0 ~ "^  " target ":" {
+            line = $0
+            inline_pat = "[ {,]" field ":[[:space:]]*"
+            if (match(line, inline_pat)) {
+                # Strip everything up to and including the field key.
+                rest = substr(line, RSTART + RLENGTH)
+                # Cut at the next comma or closing brace.
+                if (match(rest, /[,}]/)) {
+                    rest = substr(rest, 1, RSTART - 1)
+                }
+                # Strip surrounding quotes and trailing space.
+                gsub(/^["\047]|["\047][[:space:]]*$/, "", rest)
+                sub(/[[:space:]]+$/, "", rest)
+                if (rest != "") { print rest; exit }
+            }
+            in_target = 1; next
+        }
+        in_target && $0 ~ "^    " field ":[[:space:]]*" {
+            val = $0
+            sub(/.*:[[:space:]]*["\047]?/, "", val)
+            sub(/["\047]?[[:space:]]*$/, "", val)
+            print val
+            exit
+        }
+        in_target && /^  [a-zA-Z]/ { exit }
+    ' "$file"
+}
+
+# Get output directory for a target (scoped to targets: section).
+# POSIX awk — no 3-arg match().
+# Usage: get_target_output "config.yaml" "claude"
+get_target_output() {
+    local file="$1"
+    local target="$2"
+    awk -v target="$target" '
+        { sub(/\r$/, "") }
+
+        /^targets:[[:space:]]*$/ { in_targets = 1; next }
+        /^[a-zA-Z]/ { in_targets = 0 }
+
+        in_targets && $0 ~ "^  " target ":" {
+            line = $0
+            if (match(line, /output:[[:space:]]*/)) {
+                rest = substr(line, RSTART + RLENGTH)
+                if (match(rest, /[,}]/)) {
+                    rest = substr(rest, 1, RSTART - 1)
+                }
+                gsub(/^["\047]|["\047][[:space:]]*$/, "", rest)
+                sub(/[[:space:]]+$/, "", rest)
+                if (rest != "") { print rest; exit }
+            }
+            in_target = 1; next
+        }
+        in_target && /output:/ {
+            val = $0
+            sub(/.*output:[[:space:]]*["\047]?/, "", val)
+            sub(/["\047]?[[:space:]]*}?$/, "", val)
+            print val
+            exit
+        }
+        in_target && /^  [a-zA-Z]/ { exit }
+    ' "$file"
+}
+
+# Read a multi-line block scalar (| or > style) from a target's field.
+# Usage: get_target_block "config.yaml" "agents" "header"
+# Reads YAML of the shape:
+#   targets:
+#     agents:
+#       header: |
+#         # Project
+#         one-liner
+# Strips the common content indent from all lines in the block.
+get_target_block() {
+    local file="$1"
+    local target="$2"
+    local field="$3"
+    awk -v target="$target" -v field="$field" '
+        { sub(/\r$/, "") }
+
+        /^targets:[[:space:]]*$/ { in_targets = 1; next }
+        /^[a-zA-Z]/ { in_targets = 0 }
+
+        # State 0: looking for "  <target>:" under targets
+        state == 0 && in_targets && $0 ~ "^  " target ":[[:space:]]*$" {
+            state = 1
+            next
+        }
+
+        # State 1: inside target block, looking for "    <field>: |"
+        state == 1 {
+            if ($0 ~ /^[^ ]/) { exit }             # top-level key — exit
+            if ($0 ~ /^  [a-zA-Z]/) { exit }       # another target — exit
+            if ($0 ~ "^[[:space:]]+" field ":[[:space:]]*[|>][[:space:]]*$") {
+                match($0, /^[[:space:]]+/)
+                field_indent = RLENGTH
+                state = 2
+                block_indent = 0
+            }
+            next
+        }
+
+        # State 2: collecting block contents
+        state == 2 {
+            if ($0 ~ /^[[:space:]]*$/) {
+                print ""
+                next
+            }
+            match($0, /^[[:space:]]*/)
+            cur_indent = RLENGTH
+            if (cur_indent <= field_indent) { exit }
+            if (block_indent == 0) { block_indent = cur_indent }
+            if (cur_indent < block_indent) { exit }
+            print substr($0, block_indent + 1)
+        }
+    ' "$file"
+}
+
+# Get project name from config.yaml (project.name)
+get_project_name() {
+    local file="$1"
+    awk '
+        { sub(/\r$/, "") }
+        /^project:/ { in_p = 1; next }
+        in_p && /^  name:/ {
+            val = $0
+            sub(/.*name:[[:space:]]*["\047]?/, "", val)
+            sub(/["\047]?[[:space:]]*$/, "", val)
+            print val
+            exit
+        }
+        in_p && /^[a-z]/ { exit }
+    ' "$file"
+}

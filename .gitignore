@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Generated (from intelligence/scripts/sync.sh — only relevant if testing locally)
+.claude/
+.cursor/
+.agents/
+.codex/
+
+# Temp dirs from intelligence/scripts/update.sh (mktemp fallback)
+.tmp/
