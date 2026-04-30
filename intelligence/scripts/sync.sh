@@ -118,7 +118,8 @@ for adapter in "${ADAPTERS[@]}"; do
         validate_output_path "$REPO_ROOT" "$CONFIG_FILE" "$adapter" "$output_dir"
     fi
 
-    # Source adapter and run
+    # Source adapter and run.
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/adapters/$adapter.sh"
     "sync_to_$adapter" "$REPO_ROOT" "$CONFIG_FILE" "$output_dir"
     echo ""

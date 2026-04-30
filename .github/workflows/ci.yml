@@ -101,7 +101,9 @@ jobs:
 
       - name: Run sync
         shell: bash
-        run: bash "$PROJ/intelligence/scripts/sync.sh"
+        run: |
+          cd "$PROJ"
+          bash intelligence/scripts/sync.sh
 
       - name: Verify AGENTS.md
         shell: bash
@@ -213,7 +215,8 @@ jobs:
           git -C "$PROJ" add -A
           git -C "$PROJ" -c user.email=ci@example.com -c user.name=ci commit -q -m init
 
-          if bash "$PROJ/intelligence/scripts/sync.sh"; then
+          cd "$PROJ"
+          if bash intelligence/scripts/sync.sh; then
             echo "FAIL: sync did not refuse dangerous output path."
             exit 1
           else
@@ -248,7 +251,8 @@ jobs:
           git -C "$PROJ" add -A
           git -C "$PROJ" -c user.email=ci@example.com -c user.name=ci commit -q -m init
 
-          if bash "$PROJ/intelligence/scripts/sync.sh"; then
+          cd "$PROJ"
+          if bash intelligence/scripts/sync.sh; then
             echo "FAIL: sync did not enforce agents-required invariant."
             exit 1
           else
