@@ -1,6 +1,6 @@
 ---
 name: intelligence-uninstall-adapter
-description: Disable an IDE adapter and clean up its output
+description: Disable IDE adapter and clean up output
 argument-hint: <target-name>
 ---
 

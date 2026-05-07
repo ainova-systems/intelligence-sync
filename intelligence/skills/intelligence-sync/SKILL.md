@@ -1,6 +1,6 @@
 ---
 name: intelligence-sync
-description: Sync intelligence sources to all enabled IDE targets
+description: Sync intelligence to enabled IDE targets
 ---
 
 Run the sync engine to transform rules, agents, and skills from the intelligence source directory to each enabled IDE's native format.

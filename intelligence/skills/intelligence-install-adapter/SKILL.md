@@ -1,6 +1,6 @@
 ---
 name: intelligence-install-adapter
-description: Enable a new IDE adapter for intelligence-sync
+description: Enable IDE adapter for intelligence-sync
 argument-hint: <target-name>
 ---
 

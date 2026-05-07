@@ -1,6 +1,6 @@
 ---
 name: intelligence-update
-description: Pull the latest intelligence-sync scripts and INIT.md from upstream without touching project content
+description: Pull latest intelligence-sync scripts from upstream
 argument-hint: "[--yes]"
 ---
 

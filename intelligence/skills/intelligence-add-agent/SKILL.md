@@ -1,6 +1,6 @@
 ---
 name: intelligence-add-agent
-description: Create a new specialized agent following intelligence-sync conventions
+description: Create new specialized agent
 argument-hint: <domain> [description]
 ---
 

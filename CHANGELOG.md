@@ -4,6 +4,12 @@ All notable changes to intelligence-sync are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] — 2026-05-07
+
+### Changed
+
+- Shortened skill descriptions to fit Claude Code listing budget and prevent truncation.
+
 ## [0.1.0] — Initial release
 
 First public release.

@@ -1,6 +1,6 @@
 ---
 name: intelligence-add-skill
-description: Create a new skill following intelligence-sync naming and structure conventions
+description: Create new skill
 argument-hint: <domain> <verb-noun> [description]
 ---
 

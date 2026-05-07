@@ -1,6 +1,6 @@
 ---
 name: intelligence-add-rule
-description: Create a new rule following intelligence-sync conventions
+description: Create new intelligence rule
 argument-hint: <name> [paths-glob]
 ---
 
