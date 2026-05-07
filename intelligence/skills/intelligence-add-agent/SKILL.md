@@ -1,6 +1,6 @@
 ---
 name: intelligence-add-agent
-description: Create new specialized agent
+description: "Create new specialized agent"
 argument-hint: <domain> [description]
 ---
 
@@ -46,7 +46,7 @@ argument-hint: <domain> [description]
    ---
    ```
 
-   **YAML safety (required):** wrap `description` (and any other string field) in double quotes when it contains `:` `#` `[` `]` `{` `}` `,` `&` `*` `!` `|` `>` `'` `"` `%` `@` ``` ` ```, starts with `-` / whitespace, or could be parsed as a boolean / number. Codex CLI uses strict YAML — unquoted colons silently break the agent.
+   **YAML safety (required):** **always wrap `description` (and any other free-text string field) in double quotes**, regardless of content. Codex CLI uses strict YAML — an unquoted colon, leading hyphen, or word that parses as boolean (`yes`, `no`, `true`) silently breaks the agent. Quoting unconditionally prevents the entire class of bug.
 
 6. **Write body** with sections: **Expertise** -> **Before Any Task** -> **Build & Verify**
    - "Before Any Task" must reference: `Read intelligence/rules/<domain>.md before starting`

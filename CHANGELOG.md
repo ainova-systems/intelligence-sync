@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - Shortened skill descriptions to fit Claude Code listing budget and prevent truncation.
+- Enforced YAML quoting in Codex adapter.
 
 ## [0.1.0] — Initial release
 

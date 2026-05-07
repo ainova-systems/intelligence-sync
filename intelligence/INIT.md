@@ -395,11 +395,13 @@ Gitignored user preferences:
 
 ### Frontmatter
 
+**YAML safety (required):** **always wrap `description` and any other free-text string field in double quotes**, even when no special characters are present. Codex CLI uses strict YAML — an unquoted colon, hyphen, or word that parses as boolean (`yes`, `no`) silently breaks the file. Quoting unconditionally removes a whole class of bugs and makes lint trivial.
+
 **Agent:**
 ```yaml
 ---
 name: agent-name
-description: When to use this agent
+description: "When to use this agent"
 tier: heavy|standard|light       # heavy=opus, standard=sonnet, light=haiku
 access: full|readonly            # full=all tools, readonly=no write/edit
 skills:                          # optional: skills this agent can invoke
@@ -420,7 +422,7 @@ paths:                           # omit for always-loaded rules
 ```yaml
 ---
 name: domain-verb-noun
-description: What the skill does
+description: "What the skill does"
 argument-hint: <arg1> [arg2]     # optional
 agent: agent-name                # optional: which agent executes this skill
 ---

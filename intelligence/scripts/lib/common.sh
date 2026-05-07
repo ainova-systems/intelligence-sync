@@ -37,6 +37,47 @@ yaml_dq_escape() {
     printf '%s' "$s"
 }
 
+# Copy a markdown file with frontmatter, ensuring free-text string fields are
+# wrapped in double quotes. Used by adapters that feed strict-YAML consumers
+# (Codex CLI rejects unquoted colons / booleans). Idempotent — already-quoted
+# values pass through untouched. Operates only inside the first `---` ... `---`
+# block; body is preserved verbatim.
+#
+# Quoted fields: description, argument-hint
+# Note: values containing literal `"` or `\` are passed through assuming the
+# author already escaped them; lint_frontmatter warns on suspicious cases.
+#
+# Usage: copy_md_with_quoted_frontmatter "src.md" "dst.md"
+copy_md_with_quoted_frontmatter() {
+    local src="$1"
+    local dst="$2"
+    awk '
+        BEGIN { state = "before" }
+        { sub(/\r$/, "") }
+        state == "before" {
+            if (NR == 1 && $0 == "---") { state = "in_fm"; print; next }
+            state = "after"; print; next
+        }
+        state == "in_fm" {
+            if ($0 == "---") { state = "after"; print; next }
+            idx = index($0, ":")
+            if (idx == 0) { print; next }
+            key = substr($0, 1, idx - 1)
+            sub(/^[[:space:]]+/, "", key); sub(/[[:space:]]+$/, "", key)
+            if (key != "description" && key != "argument-hint") { print; next }
+            val = substr($0, idx + 1)
+            sub(/^[[:space:]]+/, "", val); sub(/[[:space:]]+$/, "", val)
+            if (val == "") { print; next }
+            first = substr(val, 1, 1)
+            last = substr(val, length(val), 1)
+            if ((first == "\"" && last == "\"") || (first == "\047" && last == "\047")) { print; next }
+            print key ": \"" val "\""
+            next
+        }
+        state == "after" { print }
+    ' "$src" > "$dst"
+}
+
 # Lint YAML frontmatter for common pitfalls (unquoted colons, leading tabs).
 # Print warnings to stderr; do not fail. Strict consumers (Codex CLI) reject
 # these files with cryptic messages — catching them in sync gives better DX.

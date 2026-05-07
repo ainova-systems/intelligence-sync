@@ -1,6 +1,6 @@
 ---
 name: intelligence-add-skill
-description: Create new skill
+description: "Create new skill"
 argument-hint: <domain> <verb-noun> [description]
 ---
 
@@ -44,7 +44,7 @@ argument-hint: <domain> <verb-noun> [description]
    ---
    ```
 
-   **YAML safety (required):** wrap every string value in double quotes when it contains any of `:` `#` `[` `]` `{` `}` `,` `&` `*` `!` `|` `>` `'` `"` `%` `@` ``` ` ```, starts with `-` or whitespace, or could be parsed as a boolean / number (`yes`, `no`, `true`, `1.0`). Codex CLI uses strict YAML — an unquoted colon in `description: Build retrospective: monthly` makes it parse as a nested mapping and the skill is rejected at startup.
+   **YAML safety (required):** **always wrap `description`, `argument-hint` and any other free-text string value in double quotes**, regardless of content. Codex CLI uses strict YAML — an unquoted colon in `description: Build retrospective: monthly` parses as a nested mapping and the skill is rejected at startup. Quoting unconditionally removes the whole class of bug and makes lint trivial.
 
 6. **Write steps**: Numbered, concrete, executable. Include verification (build/test) at the end. For orchestrators — reference atomic skills by name.
 

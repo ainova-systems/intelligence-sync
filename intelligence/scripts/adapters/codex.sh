@@ -30,7 +30,9 @@ sync_codex_skills() {
             skill_name="$(basename "$d")"
             [ -f "$d/SKILL.md" ] || continue
             mkdir -p "$output_dir/$skill_name"
-            cp "$d/SKILL.md" "$output_dir/$skill_name/SKILL.md"
+            # Codex CLI uses strict YAML — unquoted description/argument-hint
+            # values silently break the skill. Adapter enforces quoting on copy.
+            copy_md_with_quoted_frontmatter "$d/SKILL.md" "$output_dir/$skill_name/SKILL.md"
             normalize_file_to_lf "$output_dir/$skill_name/SKILL.md"
             count=$((count + 1))
             echo "  skill: $skill_name"

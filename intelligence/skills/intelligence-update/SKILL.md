@@ -1,6 +1,6 @@
 ---
 name: intelligence-update
-description: Pull latest intelligence-sync scripts from upstream
+description: "Pull latest intelligence-sync scripts from upstream"
 argument-hint: "[--yes]"
 ---
 
