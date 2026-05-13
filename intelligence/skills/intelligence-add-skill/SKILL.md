@@ -8,9 +8,9 @@ argument-hint: <domain> <verb-noun> [description]
 
 ## Steps
 
-1. **Determine domain prefix** (the scope — required, never omit):
-   - **Reuse existing domains first**: list `intelligence/skills/` and `intelligence/agents/`. If a domain prefix is already established for the target area (e.g., `backend-`, `frontend-`, `devops-`), reuse it. Do not invent new domains without clear need.
-   - **If no existing domain fits**, derive from repo structure:
+1. **Determine domain prefix** (the scope is required):
+   - **Reuse the existing domain when one fits**: list `intelligence/skills/` and `intelligence/agents/`. If a domain prefix is already established for the target area (`backend-`, `frontend-`, `devops-`), use it. Introduce a new domain only when the scope is materially different from all existing ones.
+   - **When no existing domain fits**, derive from repo structure:
      - Single / root project → use the project codename from `intelligence/config.yaml` → `project.name`
      - Backend service / API component → `backend-`
      - Frontend / web / UI component → `frontend-`
@@ -19,7 +19,7 @@ argument-hint: <domain> <verb-noun> [description]
      - Test suites (e2e, integration) → `tests-`
      - Tool-internal (intelligence-sync itself) → `intelligence-`
    - If the repo is a monorepo with named components (e.g., `apps/billing`, `services/auth`), prefer the component name as the domain (`billing-`, `auth-`).
-   - **Never create a skill without a domain prefix.** If the scope is unclear, ask the user before proceeding.
+   - **Every skill needs a domain prefix.** If the scope is unclear, ask the user before proceeding.
 
 2. **Determine naming**: Build full name as `<domain>-<verb>-<noun>` using convention:
    - `add-` — creates a single artifact (atomic)

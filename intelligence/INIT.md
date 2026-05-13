@@ -269,11 +269,12 @@ Always-loaded context (no `paths:` in frontmatter):
 ### 3.3 Component-specific rules
 
 One rule per component, scoped with `paths:` frontmatter:
-- FORBIDDEN patterns
-- REQUIRED patterns
-- Code examples from the actual codebase
-- Component-specific build/test commands
+- REQUIRED patterns (positive defaults — what to do, judgment calls)
+- Invariants (true must-nots: safety, output format, security — never judgment calls)
 - Architecture patterns
+- Component-specific build/test commands
+- Code examples from the actual codebase
+- Patterns to recognize and replace (optional — anti-patterns documented as reference with positive replacements; documentation, not LLM instruction)
 
 ### 3.4 Agents
 
@@ -430,7 +431,11 @@ agent: agent-name                # optional: which agent executes this skill
 
 ### Content structure
 
-**Rule body:** FORBIDDEN -> REQUIRED -> Architecture -> Build & Test -> Examples (from actual codebase)
+**Rule body:** REQUIRED -> Invariants -> Architecture -> Build & Test -> Examples (from actual codebase) -> Patterns to recognize and replace (optional reference section)
+
+- Lead with REQUIRED (positive defaults / judgment calls)
+- Reserve **Invariants** for true must-nots — safety, output format, security
+- **Patterns to recognize and replace** is reference documentation of anti-patterns with their positive replacement, not LLM instructions
 
 **Agent body:** Expertise -> Before Any Task (reference rules to read) -> Build & Verify
 

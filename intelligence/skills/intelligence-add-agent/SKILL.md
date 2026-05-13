@@ -8,9 +8,9 @@ argument-hint: <domain> [description]
 
 ## Steps
 
-1. **Determine domain prefix** (the scope — required, never omit):
-   - **Reuse existing domains first**: list `intelligence/agents/` and `intelligence/skills/`. If a domain prefix is already established for the target area (e.g., `backend-`, `frontend-`, `devops-`), reuse it. Do not invent new domains without clear need.
-   - **If no existing domain fits**, derive from repo structure:
+1. **Determine domain prefix** (the scope is required):
+   - **Reuse the existing domain when one fits**: list `intelligence/agents/` and `intelligence/skills/`. If a domain prefix is already established for the target area (`backend-`, `frontend-`, `devops-`), use it. Introduce a new domain only when the scope is materially different from all existing ones.
+   - **When no existing domain fits**, derive from repo structure:
      - Single / root project → use the project codename from `intelligence/config.yaml` → `project.name`
      - Backend service / API component → `backend-`
      - Frontend / web / UI component → `frontend-`
@@ -19,7 +19,7 @@ argument-hint: <domain> [description]
      - Test suites (e2e, integration) → `tests-`
      - Tool-internal (intelligence-sync itself) → `intelligence-`
    - If the repo is a monorepo with named components (e.g., `apps/billing`, `services/auth`), prefer the component name as the domain (`billing-`, `auth-`).
-   - **Never create an agent without a domain prefix.** If the scope is unclear, ask the user before proceeding.
+   - **Every agent needs a domain prefix.** If the scope is unclear, ask the user before proceeding.
 
 2. **Check existing agents**: Read `intelligence/agents/` to avoid duplicates. If an agent for this domain exists, ask user whether to update it instead.
 

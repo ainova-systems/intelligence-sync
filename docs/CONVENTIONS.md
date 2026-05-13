@@ -1,5 +1,25 @@
 # intelligence-sync: Conventions
 
+## Choosing artifact type
+
+Three artifact types — each has a different intent and loading mechanism. Picking the right one is the first authoring decision.
+
+| Type | Intent | Loading | Content |
+|---|---|---|---|
+| **Rule** | LLM **respects** a constraint or convention in the background | Auto (path-scoped or always-on) | Required patterns, invariants, architecture, examples |
+| **Skill** | LLM **performs** a multi-step procedure on invocation | Explicit (`/skill-name`) | Numbered steps with verification |
+| **Agent** | LLM **adopts** a persona / domain expertise | Explicit (via agent picker) | Expertise scope, before-any-task checklist, build/verify |
+
+Plain rule of thumb:
+- "AI should consider X across any work in scope" → **rule**
+- "AI should execute a defined sequence of steps" → **skill**
+- "AI should think as an X-domain expert with these tools" → **agent**
+
+Common mistakes to avoid:
+- Conventions / standards embedded in an agent body → belongs in a **rule** (auto-loaded, shared across all agents working in scope)
+- A workflow embedded in a rule body → belongs in a **skill** (explicit invocation, not always-loaded context)
+- Expertise scope embedded in a skill body → belongs in an **agent** (persona reusable across many skills)
+
 ## Source Structure
 
 ```
@@ -134,6 +154,70 @@ Agents follow the same domain prefix rule: `<domain>-<role>` (e.g., `backend-dev
 - **Atomic** (`add-`): Full implementation details, code patterns, examples
 - **Orchestrator** (`create-`): Thin wrapper — discovery logic + calls to atomic skills. NO pattern duplication
 - **Meta-orchestrator** (`update-`): Discovers existing components, invokes atomic skills for gaps
+
+## Authoring Discipline
+
+### Writing description fields
+
+Each skill, rule, and agent has a `description` field in frontmatter. This field is loaded into every IDE's available-skills context. **Total description tokens across all artifacts compete for a shared budget** — with a large registry, longer descriptions push other skills out of reach.
+
+Two cases:
+
+| Case | Format | Length target |
+|---|---|---|
+| **Unique skill** (no siblings doing similar action) | Plain verb-noun phrase | 4-8 words |
+| **Skill with siblings** (multiple similar skills in registry) | verb-noun + distinct trigger phrase | 10-20 words, 250 char hard cap |
+
+Examples:
+
+```yaml
+# Unique skill — short is fine
+description: "Create new intelligence rule"
+
+# Sibling skill — needs distinguishing trigger
+description: "Run weekly check-up: retrospective + strategic analysis + next week planning"
+```
+
+When the registry grows past comfortable budget, prefer **curation** (merge duplicates, archive orphans via `intelligence-review-skills`) over truncating descriptions individually.
+
+### Size discipline
+
+Reference sizes for skill / rule / agent bodies:
+
+| Type | Target | Hard cap | Over-budget action |
+|---|---|---|---|
+| SKILL.md body | <500 lines | 1000 lines | Refactor via `references/<topic>.md` and point to it from SKILL.md |
+| Reference file (`references/*.md`) | <300 lines | 500 lines | Add table of contents past 300 lines |
+| Rule | 80-300 lines | 500 lines | Split by sub-scope, or move pattern detail to `references/` |
+| Agent | 40-150 lines | 200 lines | Refactor — agents stay thin; heavy content lives in skills/rules |
+
+When approaching limits, add a layer of hierarchy: move detail into `references/<topic>.md`, then point to it from SKILL.md with `Read references/<topic>.md when [condition].`
+
+Resource organization:
+
+```
+skill-name/
+├── SKILL.md (required, <500 lines)
+├── references/    — Detailed docs loaded as needed
+├── scripts/       — Executable code for deterministic / repetitive tasks
+└── assets/        — Files used in output (templates, fonts, icons)
+```
+
+### Writing principles
+
+Apply to skill bodies, rule bodies, and agent bodies — anywhere LLM-facing instructions are authored.
+
+**Use imperative form.** "Read the config file" works better than "You should read the config file."
+
+**Explain the WHY.** LLMs follow positive instructions better when reasoning is visible. "Use module boundaries — AI knows which imports are allowed without guessing" works better than "Use module boundaries (MUST)."
+
+**Reserve absolute language for true invariants.** ALL-CAPS MUSTs and NEVERs fit security, safety, output format — places where the constraint is non-negotiable. For judgment calls, write **decision rules** in positive form: "When X, do Y" instead of "NEVER do Z." If you find yourself writing ALWAYS or NEVER in all caps for a judgment call, that's a yellow flag — reframe and explain the reasoning.
+
+**Keep prompts lean.** Remove instructions that aren't pulling their weight. Padding wastes context and dilutes the instructions that matter.
+
+**Lead with positive defaults.** Rule body order: REQUIRED → Invariants → Architecture → Build & Test → Examples → Patterns to recognize and replace. The LLM acts on the positive instruction it reads first; anti-patterns sit at the end as reference documentation, not as instructions.
+
+**Bundle repeated patterns as scripts.** If the LLM reinvents the same helper on every invocation, encode it in `scripts/` and have the skill call it.
 
 ## Generated Output
 
