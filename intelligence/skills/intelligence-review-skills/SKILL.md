@@ -1,7 +1,7 @@
 ---
 name: intelligence-review-skills
 description: "Audit intelligence/ for duplicates, stale, size, and discipline issues"
-argument-hint: [target: rules|skills|agents|all]
+argument-hint: "[target: rules|skills|agents|all]"
 ---
 
 # Review Skills

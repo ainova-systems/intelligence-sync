@@ -1,7 +1,7 @@
 ---
 name: intelligence-extract-skill
 description: "Extract observed workflow into a reusable skill"
-argument-hint: <skill-name-hint> [target: skill|rule|agent]
+argument-hint: "<skill-name-hint> [target: skill|rule|agent]"
 ---
 
 # Extract Skill
