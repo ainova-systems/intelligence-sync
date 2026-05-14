@@ -1,7 +1,11 @@
 #!/bin/bash
 # intelligence-sync: self-update
-# Pulls the latest intelligence/scripts/ and intelligence/INIT.md from upstream
-# without touching project content (config.yaml, rules/, agents/, skills/).
+# Pulls the latest upstream-owned content into the local vendored copy:
+#   - intelligence/scripts/
+#   - intelligence/INIT.md
+#   - intelligence/skills/intelligence-*  (meta-skills only, by prefix)
+#   - docs/  (vendored as intelligence/docs/)
+# Project content (config.yaml, rules/, agents/, non-meta skills/) is never touched.
 #
 # Usage:
 #   bash intelligence/scripts/update.sh                     # interactive
@@ -37,6 +41,7 @@ echo "  Cloning latest..."
 git clone --depth=1 --quiet "$REPO_URL" "$WORK_DIR"
 
 UPSTREAM_INTEL="$WORK_DIR/intelligence"
+UPSTREAM_DOCS="$WORK_DIR/docs"
 if [ ! -d "$UPSTREAM_INTEL/scripts" ]; then
     echo "ERROR: upstream layout unexpected — no intelligence/scripts/ at $UPSTREAM_INTEL"
     exit 1
@@ -50,29 +55,79 @@ echo ""
 echo "  Diff (INIT.md):"
 diff -uN "$INTELLIGENCE_DIR/INIT.md" "$UPSTREAM_INTEL/INIT.md" || true
 
+echo ""
+echo "  Diff (meta-skills intelligence-*):"
+for upstream_skill in "$UPSTREAM_INTEL"/skills/intelligence-*; do
+    [ -d "$upstream_skill" ] || continue
+    skill_name=$(basename "$upstream_skill")
+    diff -ruN "$INTELLIGENCE_DIR/skills/$skill_name" "$upstream_skill" || true
+done
+
+if [ -d "$UPSTREAM_DOCS" ]; then
+    echo ""
+    echo "  Diff (docs/):"
+    diff -ruN "$INTELLIGENCE_DIR/docs" "$UPSTREAM_DOCS" || true
+fi
+
 if [ $AUTO_YES -ne 1 ]; then
     echo ""
-    read -r -p "Apply update? scripts/ and INIT.md will be overwritten; config.yaml / rules / agents / skills will NOT be touched. [y/N] " confirm
+    read -r -p "Apply update? scripts/, INIT.md, meta-skills (intelligence-*), and docs/ will be overwritten; config.yaml / rules / agents / project skills will NOT be touched. [y/N] " confirm
     case "$confirm" in
         y|Y|yes|YES) ;;
         *) echo "  Cancelled."; exit 0 ;;
     esac
 fi
 
-# Apply: replace scripts/ contents and INIT.md. Preserve any user files
-# the user dropped under scripts/ (not present upstream) by using rsync if
-# available, otherwise overwrite cleanly.
+# Apply scripts/ (full sync)
 if command -v rsync >/dev/null 2>&1; then
     rsync -a --delete "$UPSTREAM_INTEL/scripts/" "$INTELLIGENCE_DIR/scripts/"
 else
     rm -rf "$INTELLIGENCE_DIR/scripts"
     cp -r "$UPSTREAM_INTEL/scripts" "$INTELLIGENCE_DIR/scripts"
 fi
+
+# Apply INIT.md
 cp "$UPSTREAM_INTEL/INIT.md" "$INTELLIGENCE_DIR/INIT.md"
+
+# Apply meta-skills (intelligence-* prefix only)
+mkdir -p "$INTELLIGENCE_DIR/skills"
+for upstream_skill in "$UPSTREAM_INTEL"/skills/intelligence-*; do
+    [ -d "$upstream_skill" ] || continue
+    skill_name=$(basename "$upstream_skill")
+    target="$INTELLIGENCE_DIR/skills/$skill_name"
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --delete "$upstream_skill/" "$target/"
+    else
+        rm -rf "$target"
+        cp -r "$upstream_skill" "$target"
+    fi
+done
+
+# Remove local meta-skills that no longer exist upstream
+# (so deleted meta-skills disappear on update, while project skills remain untouched)
+for local_skill in "$INTELLIGENCE_DIR"/skills/intelligence-*; do
+    [ -d "$local_skill" ] || continue
+    skill_name=$(basename "$local_skill")
+    if [ ! -d "$UPSTREAM_INTEL/skills/$skill_name" ]; then
+        echo "  Removing local meta-skill no longer in upstream: $skill_name"
+        rm -rf "$local_skill"
+    fi
+done
+
+# Apply docs/ if upstream has them — vendored as <intel>/docs/
+if [ -d "$UPSTREAM_DOCS" ]; then
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --delete "$UPSTREAM_DOCS/" "$INTELLIGENCE_DIR/docs/"
+    else
+        rm -rf "$INTELLIGENCE_DIR/docs"
+        cp -r "$UPSTREAM_DOCS" "$INTELLIGENCE_DIR/docs"
+    fi
+fi
 
 # Normalize LF for shell scripts on Windows just in case
 find "$INTELLIGENCE_DIR/scripts" -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 
 echo ""
-echo "  Updated. Untouched: config.yaml, rules/, agents/, skills/."
+echo "  Updated:   scripts/, INIT.md, meta-skills (intelligence-*), docs/"
+echo "  Untouched: config.yaml, rules/, agents/, project skills."
 echo "  Next: bash intelligence/scripts/sync.sh"
