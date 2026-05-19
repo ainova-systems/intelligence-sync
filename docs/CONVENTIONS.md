@@ -241,6 +241,39 @@ Skill locations all comply with the Agent Skills open standard. Cursor reads fro
 
 `AGENTS.md` is always enabled and regenerated on every sync. The static header (`targets.agents.header` in `config.yaml`) is the only hand-authored part; everything below it is rebuilt from frontmatter — agents/skills tables, the rules list, and the inlined content of every always-on rule (those without `paths:`). Path-scoped rules are listed by name only so AGENTS.md does not balloon in monorepos.
 
+## Migration & Module Contract
+
+Structural changes to the module layout are handled by **versioned migrations**, not ad-hoc scripts or manual instructions. The model is designed for an *unbounded, uncoordinated* upgrade window — a project may sit on an old version indefinitely and still migrate safely whenever it finally runs.
+
+**Division of responsibility**
+
+- **Bash = deterministic, fail-closed core.** It performs only mechanically safe, reversible-until-committed steps and **never guesses**. Any state it cannot resolve safely is reported, not forced.
+- **`intelligence-update` skill = intelligent layer.** It detects project state, bootstraps the engine, runs bash, interprets the status, and resolves the cases bash refuses (asking the user when genuinely ambiguous).
+
+**Every `migrate_to_<ver>` obeys this contract**
+
+1. **Version-named & ordered.** Suffix is the target version (`migrate_to_0_3_1`); listed in `MIGRATIONS=()` in order. The dispatcher runs the chain so a project several versions behind is brought forward step by step. Never reorder or rewrite shipped migrations — only append.
+2. **Self-guarding & idempotent.** Checks its own precondition; a no-op (silent) once applied. Replaying the whole registry any number of times never fails or duplicates.
+3. **Transactional / fail-closed.** Stage → **verify postcondition (sentinel)** → commit → only then delete the old state. A crash or partial input leaves the prior state intact; nothing is destroyed before the replacement is verified.
+4. **Version-compat guard.** A stale engine refuses to operate on a project stamped newer than it understands (`ahead-of-engine`) — prevents corruption across mixed module/version states.
+5. **Status hand-off is first-class.** "Cannot safely automate" is a normal outcome, reported via the contract below — not an error to paper over.
+
+**bash ↔ skill status contract** (codes are public; never renumber)
+
+| `IS_STATUS` | exit | Meaning |
+|---|---|---|
+| `ok` | 0 | Up to date / nothing to do |
+| `migrated` | 0 | Migration performed this run |
+| `error` | 1 | Generic failure (detail in message) |
+| `config-missing` | 2 | No `config.yaml` — project not bootstrapped |
+| `ambiguous` | 3 | Conflicting state; only the skill/human can resolve |
+| `ahead-of-engine` | 4 | Project stamped newer than this engine |
+| `aborted-incomplete` | 5 | Staged module incomplete; legacy left intact |
+
+Bash emits `IS_STATUS=<code> [IS_DETAIL=...]` on stdout and exits with the matching code; callers capture it with `cmd || rc=$?` (never `if ! cmd; then exit $?` — that loses the code). The skill branches on the code.
+
+**Module model.** Each `<umbrella>/<module>/` (`sync/`, future `brain/`, …) is self-contained: its own `scripts/`, `skills/`, `INIT.md`, `docs/`, and `.intelligence-sync-version` stamp. Modules are updated independently and never touch sibling modules or project content (`rules/`, `agents/`, non-meta `skills/`, `config.yaml` — except the one idempotent additive `sources.skills` line a migration may add).
+
 ## .gitignore Pattern
 
 ```

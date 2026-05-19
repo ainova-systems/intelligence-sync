@@ -76,8 +76,9 @@ elif [ -d "$WORK_DIR/intelligence/scripts" ]; then
         [ -d "$s" ] && cp -r "$s" "$UPMOD/skills/"
     done
 else
+    is_status error "upstream-layout-unrecognized"
     echo "ERROR: upstream layout unrecognized — no intelligence/$MODULE_NAME/scripts/ or intelligence/scripts/."
-    exit 1
+    exit "$IS_RC_ERROR"
 fi
 
 # Local module dir to diff against: the existing module, or (pre-migration)
@@ -122,8 +123,12 @@ if [ $AUTO_YES -ne 1 ]; then
 fi
 
 # Migrate legacy → modular if needed (authoritative content from upstream).
-# Idempotent: a no-op on already-modular projects.
-run_migrations "$UMBRELLA" "$MODULE_NAME" "$UPMOD"
+# Idempotent: a no-op on already-modular projects. Fail-closed: on a state
+# bash will not resolve it emits IS_STATUS + a stable code and we stop so the
+# intelligence-update skill can take over (never partially destroys).
+_mig_rc=0
+run_migrations "$UMBRELLA" "$MODULE_NAME" "$UPMOD" || _mig_rc=$?
+if [ "$_mig_rc" -ne 0 ]; then exit "$_mig_rc"; fi
 
 # In-place refresh of the module (covers already-modular projects, and
 # re-asserts content post-migration). Idempotent.
@@ -166,6 +171,11 @@ stamp_version "$MODULE_DIR" "$_ver"
 find "$MODULE_DIR/scripts" -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 
 echo ""
+if [ "${IS_MIGRATED:-0}" -eq 1 ]; then
+    is_status migrated "version=$_ver"
+else
+    is_status ok "version=$_ver"
+fi
 echo "  Updated:   $MODULE_NAME/scripts/, $MODULE_NAME/INIT.md, $MODULE_NAME/skills/intelligence-*, $MODULE_NAME/docs/  (version $_ver)"
 echo "  Untouched: config.yaml (except idempotent sources.skills line on migration), rules/, agents/, project skills."
 echo "  Next: bash $MODULE_NAME/scripts/sync.sh"

@@ -74,13 +74,15 @@ Or use the `/intelligence-sync` skill directly in your AI coding assistant.
 
 ### Upgrading
 
-To pull the latest engine module without touching your `config.yaml`, `rules/`, `agents/`, or project `skills/`:
+Tell your AI coding agent:
 
-```bash
-bash intelligence/sync/scripts/update.sh
-```
+> **Update intelligence-sync**
 
-Pre-0.3.1 projects (engine flat under `intelligence/`) are migrated transparently into `intelligence/sync/` on the next `update`/`sync` — meta-skills are moved (never duplicated), and a single additive line is added to `config.yaml` `sources.skills`. The migration is idempotent.
+The `intelligence-update` skill fetches the latest engine, drives any layout migration, resolves issues, and verifies the result — without touching your `config.yaml`, `rules/`, `agents/`, or project `skills/`. Idempotent and safe to repeat.
+
+Directly, if you prefer: `bash intelligence/sync/scripts/update.sh`.
+
+**Pre-0.3.1 projects** (engine flat under `intelligence/`): there is no manual procedure and no deadline. The old frozen `update.sh` fails closed (changes nothing, no data loss, however long it sits). Run the agent instruction above once — it migrates the engine into `intelligence/sync/` (meta-skills moved, never duplicated; one additive `config.yaml` line). Everything is automatic thereafter.
 
 The script clones upstream into a temp dir (cross-platform `mktemp`), shows a diff, and prompts before applying. Pass `--yes` to skip the prompt, or `REPO_URL=<your-fork>` to use a fork.
 

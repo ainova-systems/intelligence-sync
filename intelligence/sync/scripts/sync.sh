@@ -36,8 +36,12 @@ if [ "$LS_LAYOUT" = "legacy" ] && [ -z "${INTELLIGENCE_SYNC_REEXEC:-}" ] \
 fi
 
 # Apply pending migrations (offline: relocate local files). Idempotent —
-# a fully migrated or fresh project is a silent no-op.
-run_migrations "$INTELLIGENCE_DIR" "$MODULE_NAME" ""
+# a fully migrated or fresh project is a silent no-op. On a state bash will
+# not resolve (ahead-of-engine / incomplete), it emits IS_STATUS + a stable
+# code and we exit so the intelligence-update skill can take over.
+_mig_rc=0
+run_migrations "$INTELLIGENCE_DIR" "$MODULE_NAME" "" || _mig_rc=$?
+if [ "$_mig_rc" -ne 0 ]; then exit "$_mig_rc"; fi
 
 # After migration the engine lives in the module subfolder; re-point at it
 # (adapters are sourced lazily from SCRIPT_DIR further down).
@@ -63,10 +67,11 @@ else
 fi
 
 if [ -z "$CONFIG_FILE" ] || [ ! -f "$CONFIG_FILE" ]; then
+    is_status config-missing "umbrella=$INTELLIGENCE_DIR"
     echo "ERROR: Config file not found."
     echo "Looked for: config.yaml (in $INTELLIGENCE_DIR)"
     echo "Run INIT.md bootstrap or create config.yaml manually."
-    exit 1
+    exit "$IS_RC_CONFIG_MISSING"
 fi
 
 TARGET_FILTER="${1:-}"
@@ -179,4 +184,9 @@ warn_unsynced "$REPO_ROOT" "$CONFIG_FILE"
 report_model_drift "$CONFIG_FILE"
 
 echo ""
+if [ "${IS_MIGRATED:-0}" -eq 1 ]; then
+    is_status migrated "synced=$synced"
+else
+    is_status ok "synced=$synced"
+fi
 echo "=== Done: $synced target(s) synced ==="

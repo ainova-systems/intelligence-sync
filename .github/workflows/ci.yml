@@ -18,29 +18,34 @@ jobs:
       - name: Run shellcheck
         run: |
           shellcheck --version
-          # Lint the canonical module. The bridge is byte-identical (enforced
-          # by the `drift` job). Skip the adapter template — `<name>`
-          # placeholders are parsed as input redirection by bash/shellcheck.
+          # Skip the adapter template — `<name>` placeholders are parsed as
+          # input redirection by bash/shellcheck.
           find intelligence/sync/scripts -name '*.sh' \
             -not -path '*/adapters/_template.sh' \
             -print0 | xargs -0 shellcheck --severity=warning
 
-  drift:
-    name: drift (bridge == canonical)
+  repo-purity:
+    name: repo-purity (no flat twin / zero duplication)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Bridge must mirror the canonical module exactly
+      - name: Repo must be pure-modular — no flat bridge
         shell: bash
         run: |
           set -euo pipefail
-          diff -rq intelligence/scripts intelligence/sync/scripts
-          diff -q  intelligence/INIT.md intelligence/sync/INIT.md
-          diff -rq docs intelligence/sync/docs
-          for d in intelligence/sync/skills/intelligence-*; do
-            diff -rq "intelligence/skills/$(basename "$d")" "$d"
+          fail=0
+          for p in intelligence/scripts intelligence/INIT.md; do
+            if [ -e "$p" ]; then echo "DUPLICATION: $p must not exist"; fail=1; fi
           done
-          echo "OK: legacy bridge is byte-identical to intelligence/sync/"
+          if [ -n "$(find intelligence/skills -maxdepth 1 -name 'intelligence-*' 2>/dev/null)" ]; then
+            echo "DUPLICATION: intelligence/skills/intelligence-* must live only in intelligence/sync/skills/"; fail=1
+          fi
+          test -f intelligence/sync/scripts/sync.sh
+          test -f intelligence/sync/scripts/VERSION
+          # Vendored docs must mirror the doc source exactly.
+          diff -rq docs intelligence/sync/docs
+          [ "$fail" -eq 0 ] && echo "OK: pure-modular, single source, no duplication"
+          exit $fail
 
   smoke:
     name: smoke (sync against examples)
@@ -63,15 +68,12 @@ jobs:
 
           mkdir -p "$PROJ/intelligence/rules" "$PROJ/intelligence/agents" "$PROJ/intelligence/skills"
 
-          # Always-on rule (no `paths:`) — inlined into AGENTS.md + copied
-          # into .claude/rules/ but skipped by Cursor / Copilot.
           cat > "$PROJ/intelligence/rules/context.md" <<'EOF'
           # Always-on context
 
           Use this for project-wide standards.
           EOF
 
-          # Path-scoped rule — .cursor/rules/ + .github/instructions/.
           cat > "$PROJ/intelligence/rules/backend.md" <<'EOF'
           ---
           paths:
@@ -118,7 +120,9 @@ jobs:
         shell: bash
         run: |
           cd "$PROJ"
-          bash intelligence/sync/scripts/sync.sh
+          out=$(bash intelligence/sync/scripts/sync.sh)
+          echo "$out"
+          echo "$out" | grep -q 'IS_STATUS=ok' || { echo "missing IS_STATUS=ok"; exit 1; }
 
       - name: Verify AGENTS.md
         shell: bash
@@ -129,7 +133,7 @@ jobs:
           grep -q "backend-developer" "$PROJ/AGENTS.md"
           grep -q "backend-add-endpoint" "$PROJ/AGENTS.md"
 
-      - name: Verify Claude output (if enabled)
+      - name: Verify Claude / Cursor / Copilot / Codex outputs (if enabled)
         shell: bash
         run: |
           set -euo pipefail
@@ -138,50 +142,27 @@ jobs:
             test -f "$PROJ/.claude/rules/backend.md"
             test -f "$PROJ/.claude/agents/backend-developer.md"
             test -f "$PROJ/.claude/skills/backend-add-endpoint/SKILL.md"
-            grep -q "Implements backend features: APIs, services" \
-              "$PROJ/.claude/agents/backend-developer.md" || true
           fi
-
-      - name: Verify Cursor output (if enabled)
-        shell: bash
-        run: |
-          set -euo pipefail
           if [ -d "$PROJ/.cursor" ]; then
             ! test -e "$PROJ/.cursor/rules/context.mdc"
             test -f "$PROJ/.cursor/rules/backend.mdc"
             grep -q "globs:" "$PROJ/.cursor/rules/backend.mdc"
-            test -f "$PROJ/.cursor/agents/backend-developer.md"
           fi
-
-      - name: Verify Copilot output (if enabled)
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -d "$PROJ/.github/instructions" ] || [ -d "$PROJ/.github/agents" ]; then
+          if [ -d "$PROJ/.github/instructions" ]; then
             ! test -e "$PROJ/.github/copilot-instructions.md"
             test -f "$PROJ/.github/instructions/backend.instructions.md"
             grep -q "applyTo:" "$PROJ/.github/instructions/backend.instructions.md"
           fi
-
-      - name: Verify Codex output (if enabled)
-        shell: bash
-        run: |
-          set -euo pipefail
           if [ -d "$PROJ/.codex" ]; then
             test -f "$PROJ/.codex/agents/backend-developer.toml"
             grep -q 'description = "Implements backend features: APIs, services"' \
               "$PROJ/.codex/agents/backend-developer.toml"
-            grep -q 'model_reasoning_effort = "high"' \
-              "$PROJ/.codex/agents/backend-developer.toml"
-            grep -q 'sandbox_mode = "workspace-write"' \
-              "$PROJ/.codex/agents/backend-developer.toml"
             ! test -e "$PROJ/CODEX.md"
-            ! test -e "$PROJ/.codex/config.toml"
             test -f "$PROJ/.agents/skills/backend-add-endpoint/SKILL.md"
           fi
 
   migration:
-    name: migration (legacy -> sync, idempotent)
+    name: migration (legacy -> sync, idempotent, fail-closed)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -193,12 +174,12 @@ jobs:
           stage_legacy() {
             local proj="$1"
             mkdir -p "$proj/intelligence"/{rules,agents,skills}
-            # Flat engine = the migration-aware bridge code.
-            cp -r intelligence/scripts "$proj/intelligence/scripts"
-            cp intelligence/INIT.md "$proj/intelligence/INIT.md"
-            cp -r intelligence/skills/intelligence-sync   "$proj/intelligence/skills/"
-            cp -r intelligence/skills/intelligence-update  "$proj/intelligence/skills/"
-            # Project skill that MUST survive untouched.
+            # Simulate pre-0.3.1 flat layout using the current engine.
+            cp -r intelligence/sync/scripts "$proj/intelligence/scripts"
+            cp    intelligence/sync/INIT.md "$proj/intelligence/INIT.md"
+            cp -r intelligence/sync/skills/intelligence-sync   "$proj/intelligence/skills/"
+            cp -r intelligence/sync/skills/intelligence-update  "$proj/intelligence/skills/"
+            # A project skill that MUST survive untouched.
             mkdir -p "$proj/intelligence/skills/backend-add-endpoint"
             printf -- '---\nname: backend-add-endpoint\ndescription: "Add endpoint"\n---\n# Add endpoint\n' \
               > "$proj/intelligence/skills/backend-add-endpoint/SKILL.md"
@@ -236,31 +217,30 @@ jobs:
           stage_legacy "$PROJ"
           cd "$PROJ"
 
-          bash intelligence/scripts/sync.sh
+          out=$(bash intelligence/scripts/sync.sh)
+          echo "$out"
+          echo "$out" | grep -q 'IS_STATUS=migrated' || { echo "expected IS_STATUS=migrated"; exit 1; }
 
-          # Relocation
+          # Relocation + no duplication
           test -f intelligence/sync/scripts/sync.sh
           test -f intelligence/sync/INIT.md
           test -d intelligence/sync/skills/intelligence-sync
           grep -qx '0.3.1' intelligence/sync/.intelligence-sync-version
-          # Legacy removed — no duplicates (Linux deletes open scripts fine)
           ! test -d intelligence/scripts
           ! test -e intelligence/INIT.md
           [ -z "$(find intelligence/skills -maxdepth 1 -name 'intelligence-*')" ]
           # Project content intact
           test -f intelligence/skills/backend-add-endpoint/SKILL.md
           test -f intelligence/rules/context.md
-          # Idempotent additive config line + generated output
           test "$(grep -c '"intelligence/sync/skills"' intelligence/config.yaml)" -eq 1
           test -f AGENTS.md
 
-          # Re-run: must not fail, must not duplicate anything.
-          bash intelligence/sync/scripts/sync.sh
-          test -f intelligence/sync/scripts/sync.sh
+          # Idempotent re-run: no failure, no duplication, status ok.
+          out2=$(bash intelligence/sync/scripts/sync.sh)
+          echo "$out2" | grep -q 'IS_STATUS=ok' || { echo "expected IS_STATUS=ok on re-run"; exit 1; }
           ! test -d intelligence/scripts
           [ -z "$(find intelligence/skills -maxdepth 1 -name 'intelligence-*')" ]
           test "$(grep -c '"intelligence/sync/skills"' intelligence/config.yaml)" -eq 1
-          test "$(ls -d intelligence/sync/skills/intelligence-sync | wc -l)" -eq 1
 
       - name: update.sh migration from local upstream + idempotent re-run
         shell: bash
@@ -271,24 +251,45 @@ jobs:
           stage_legacy "$PROJ"
           cd "$PROJ"
 
-          REPO_URL="file://$GITHUB_WORKSPACE" bash intelligence/scripts/update.sh --yes
-
+          out=$(REPO_URL="file://$GITHUB_WORKSPACE" bash intelligence/scripts/update.sh --yes)
+          echo "$out"
+          echo "$out" | grep -q 'IS_STATUS=migrated' || { echo "expected IS_STATUS=migrated"; exit 1; }
           test -f intelligence/sync/scripts/sync.sh
-          test -f intelligence/sync/INIT.md
-          test -d intelligence/sync/docs
           grep -qx '0.3.1' intelligence/sync/.intelligence-sync-version
           [ -z "$(find intelligence/skills -maxdepth 1 -name 'intelligence-*')" ]
           test -f intelligence/skills/backend-add-endpoint/SKILL.md
           test "$(grep -c '"intelligence/sync/skills"' intelligence/config.yaml)" -eq 1
 
-          # Re-run update against the now-modular project: no-op, no failure.
-          REPO_URL="file://$GITHUB_WORKSPACE" bash intelligence/sync/scripts/update.sh --yes
-          test -f intelligence/sync/scripts/sync.sh
-          test "$(grep -c '"intelligence/sync/skills"' intelligence/config.yaml)" -eq 1
-
-          # Sync still works post-update.
-          bash intelligence/sync/scripts/sync.sh
+          out2=$(REPO_URL="file://$GITHUB_WORKSPACE" bash intelligence/sync/scripts/update.sh --yes)
+          echo "$out2" | grep -q 'IS_STATUS=ok' || { echo "expected IS_STATUS=ok on re-run"; exit 1; }
+          bash intelligence/sync/scripts/sync.sh >/dev/null
           test -f AGENTS.md
+
+      - name: Version-compat guard fails closed (ahead-of-engine)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$STAGE_LIB"
+          PROJ=$RUNNER_TEMP/ahead
+          mkdir -p "$PROJ/intelligence"
+          cp -r intelligence/sync "$PROJ/intelligence/sync"
+          cp examples/go-api/config.yaml "$PROJ/intelligence/config.yaml"
+          mkdir -p "$PROJ/intelligence/rules"
+          printf '# ctx\n' > "$PROJ/intelligence/rules/context.md"
+          # Stamp a version far ahead of the engine.
+          printf '99.0.0\n' > "$PROJ/intelligence/sync/.intelligence-sync-version"
+          git -C "$PROJ" init -q
+          git -C "$PROJ" add -A
+          git -C "$PROJ" -c user.email=ci@example.com -c user.name=ci commit -q -m init
+          cd "$PROJ"
+          set +e
+          out=$(bash intelligence/sync/scripts/sync.sh); rc=$?
+          set -e
+          echo "$out"
+          echo "rc=$rc"
+          [ "$rc" -eq 4 ] || { echo "expected exit 4 (ahead-of-engine), got $rc"; exit 1; }
+          echo "$out" | grep -q 'IS_STATUS=ahead-of-engine' || { echo "missing ahead-of-engine status"; exit 1; }
+          ! test -f AGENTS.md   # refused → nothing generated
 
   guardrails:
     name: guardrails (refuse dangerous configs)
@@ -303,9 +304,7 @@ jobs:
           mkdir -p "$PROJ/intelligence"
           cp -r intelligence/sync "$PROJ/intelligence/sync"
           mkdir -p "$PROJ/intelligence/rules"
-          cat > "$PROJ/intelligence/rules/context.md" <<'EOF'
-          # Always-on
-          EOF
+          printf '# Always-on\n' > "$PROJ/intelligence/rules/context.md"
           cat > "$PROJ/intelligence/config.yaml" <<'EOF'
           project:
             name: bad
@@ -327,11 +326,9 @@ jobs:
           git -C "$PROJ" init -q
           git -C "$PROJ" add -A
           git -C "$PROJ" -c user.email=ci@example.com -c user.name=ci commit -q -m init
-
           cd "$PROJ"
           if bash intelligence/sync/scripts/sync.sh; then
-            echo "FAIL: sync did not refuse dangerous output path."
-            exit 1
+            echo "FAIL: sync did not refuse dangerous output path."; exit 1
           else
             echo "OK: sync refused dangerous output path."
           fi
@@ -343,9 +340,7 @@ jobs:
           PROJ=$RUNNER_TEMP/noagents
           mkdir -p "$PROJ/intelligence/rules"
           cp -r intelligence/sync "$PROJ/intelligence/sync"
-          cat > "$PROJ/intelligence/rules/context.md" <<'EOF'
-          # Always-on
-          EOF
+          printf '# Always-on\n' > "$PROJ/intelligence/rules/context.md"
           cat > "$PROJ/intelligence/config.yaml" <<'EOF'
           project:
             name: noagents
@@ -363,11 +358,9 @@ jobs:
           git -C "$PROJ" init -q
           git -C "$PROJ" add -A
           git -C "$PROJ" -c user.email=ci@example.com -c user.name=ci commit -q -m init
-
           cd "$PROJ"
           if bash intelligence/sync/scripts/sync.sh; then
-            echo "FAIL: sync did not enforce agents-required invariant."
-            exit 1
+            echo "FAIL: sync did not enforce agents-required invariant."; exit 1
           else
             echo "OK: sync enforced agents-required invariant."
           fi

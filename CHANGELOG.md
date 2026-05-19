@@ -8,19 +8,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- **Modular layout.** The engine, meta-skills, `INIT.md`, and vendored docs now live in a self-contained module subfolder `<umbrella>/sync/` instead of flat under the umbrella, mixed with project content. This makes room for additional independently-updatable intelligence modules (e.g. `brain/`) alongside `sync/`. The umbrella folder name is never hardcoded — it is whatever holds `config.yaml`.
-- `sync.sh` / `update.sh` — split path detection into `lib/layout.sh` (`detect_layout`, name-agnostic) and migrations into `lib/migrations.sh` (versioned registry + dispatcher). `sync.sh` re-execs from the module after staging so destructive cleanup never deletes the running process's directory.
-- `update.sh` — accepts either upstream shape (modular `intelligence/sync/` or legacy `intelligence/scripts/`) via a normalized staging dir; prunes deprecated meta-skills; stamps the applied version.
+- **Modular layout (no duplication).** The engine, meta-skills, `INIT.md`, and vendored docs now live in one self-contained module subfolder `<umbrella>/sync/` instead of flat under the umbrella mixed with project content. Project content (`rules/`, `agents/`, non-meta `skills/`, `config.yaml`) stays at the umbrella level. This makes room for additional independently-updatable modules (e.g. `brain/`) beside `sync/`. The umbrella folder name is never hardcoded — it is whatever holds `config.yaml`.
+- `sync.sh` / `update.sh` — path detection split into `lib/layout.sh` (`detect_layout`, name-agnostic); migrations into `lib/migrations.sh` (versioned ordered registry + dispatcher). `sync.sh` re-execs from the module after staging so destructive cleanup never deletes the running process's directory.
 
 ### Added
 
-- **Secure migration** `migrate_to_0_3_1` (pre-0.3.1 flat → `<umbrella>/sync/`): copy → verify sentinel → only then delete legacy; meta-skills are moved, never duplicated; an idempotent additive line is added to `config.yaml` `sources.skills`; the run is idempotent (replaying never fails or duplicates). Version-named so future migrations chain in order.
-- `<umbrella>/sync/.intelligence-sync-version` stamp + `scripts/VERSION` source of truth.
-- CI: migration + double-run idempotency job; legacy-upstream bridge test; bridge/canonical drift check.
+- **Secure, idempotent migration** `migrate_to_0_3_1` (pre-0.3.1 flat → `<umbrella>/sync/`): copy → verify sentinel → only then delete legacy; meta-skills are **moved, never duplicated**; one idempotent additive line is added to `config.yaml` `sources.skills`; replaying never fails or duplicates. Version-named so future migrations chain in order.
+- **bash ↔ skill status contract.** The engine is deterministic and fail-closed: any state it cannot resolve safely emits a machine-readable `IS_STATUS=<code>` line + a stable exit code (`ok`/`migrated`/`ambiguous`/`ahead-of-engine`/`aborted-incomplete`/`config-missing`) and stops without guessing. The `intelligence-update` skill is the intelligent layer that interprets the code and resolves it.
+- **Version-compat guard**: a stale engine refuses to operate on a project stamped newer than it understands (`ahead-of-engine`) — prevents corruption with multiple modules/versions.
+- `<umbrella>/sync/.intelligence-sync-version` stamp + `scripts/VERSION` source of truth; generalized migration contract documented in `docs/CONVENTIONS.md`.
+
+### Migrating a pre-0.3.1 project
+
+There is **no manual procedure and no deadline**. A pre-0.3.1 project's frozen `update.sh` now fails **closed** (exits non-zero, changes nothing — no data loss, ever, no matter how long it sits). To migrate, tell your AI coding agent:
+
+> **Update intelligence-sync**
+
+The `intelligence-update` skill detects the project state, fetches the current engine, drives the migration, resolves issues, and verifies the result. Migration is idempotent and safe to repeat.
 
 ### Compatibility
 
-- Transition release: the upstream repo keeps the flat `intelligence/scripts/`, `intelligence/INIT.md`, `intelligence/skills/intelligence-*` as a **bridge** so already-deployed projects running their frozen pre-0.3.1 `update.sh` still self-update — they pull the migration-aware engine, which then relocates itself to `sync/` on the next `update`/`sync`. The bridge is removed in 0.4.0.
+- The upstream repo is **pure modular** — no flat bridge, no duplicated trees. Old clients fail closed (safe) until migrated; there is no calendar cutover to break un-migrated projects.
 - Reserved prefix: project skills must not use the `intelligence-` prefix (it marks upstream-owned meta-skills).
 
 ## [0.2.1] — 2026-05-14
