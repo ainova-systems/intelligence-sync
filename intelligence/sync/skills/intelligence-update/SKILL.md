@@ -24,11 +24,11 @@ They never run shell commands by hand — you do.
   the umbrella whose `scripts/sync.sh` **and** `scripts/VERSION` both exist
   (conventionally `sync/`, but never assume the folder name).
 - **Applied schema version** is the frozen contract key
-  `intelligence_sync_version` in `config.yaml` (a permanent top-level scalar;
+  `sync_version` in `config.yaml` (a permanent top-level scalar;
   absent ⇒ pre-0.3.1). **Engine version** is `<module>/scripts/VERSION`.
   The gap between them is the set of breaking changes to apply.
 - Pre-0.3.1 projects have the engine flat at `<umbrella>/scripts/` and **no**
-  `intelligence_sync_version` key. Their frozen `update.sh` fails closed
+  `sync_version` key. Their frozen `update.sh` fails closed
   against the modular upstream (changes nothing) — you bootstrap the first hop.
 - The `intelligence-` skill prefix is **reserved** for upstream meta-skills.
 
@@ -63,7 +63,7 @@ declines. The temp clone is only for reading the CHANGELOG and as the source
 for the eventual write.
 
 ### 3. Understand what is changing (changelog-aware)
-Determine the project's current version = the `intelligence_sync_version`
+Determine the project's current version = the `sync_version`
 value in `config.yaml`, or `0.0.0` if the key is absent (pre-0.3.1). The
 engine version = `<tmp>/intelligence/sync/scripts/VERSION`.
 
@@ -111,8 +111,10 @@ Capture stdout; find the last `IS_STATUS=<code> [IS_DETAIL=...]` line.
 | `error` | Engine couldn't proceed | Show message; check `REPO_URL`. Stop. |
 | *(no status)* | Engine crashed before contract | Show full output; don't modify the tree. Stop. |
 
+On any failure code, first re-read the upstream `CHANGELOG.md` entries for `current < release <= engine` (esp. `### Breaking`) — the breaking change usually explains the error and what the user must do — before retrying or escalating.
+
 Genuinely **ambiguous** tree (e.g. both a legacy flat `<umbrella>/scripts/`
-and a populated module, no clear `intelligence_sync_version`): inspect both,
+and a populated module, no clear `sync_version`): inspect both,
 summarize the difference, ask the user which is authoritative, apply their
 choice. Never guess.
 
@@ -123,7 +125,7 @@ Structural — always:
   (meta-skills live only in the module's `skills/`).
 - Project content intact: `<umbrella>/{rules,agents}/` and any
   non-`intelligence-` skills untouched.
-- `config.yaml` has `intelligence_sync_version` equal to the engine
+- `config.yaml` has `sync_version` equal to the engine
   `scripts/VERSION`, and `sources.skills` includes the module skills path
   exactly once.
 
@@ -146,11 +148,11 @@ Clean up the temp clone.
 - Everything is **idempotent**. Re-running on a current project is a safe
   no-op (`IS_STATUS=ok`).
 - Correctness rests on the engine's idempotent structural preconditions, not
-  on the version stamp — a missing/wrong `intelligence_sync_version` cannot
+  on the version stamp — a missing/wrong `sync_version` cannot
   cause a needed migration to be skipped; it only weakens the
   `ahead-of-engine` guard until re-stamped.
 - Never touch `config.yaml` beyond what the engine does (the idempotent
-  `sources.skills` line and the `intelligence_sync_version` key). Never
+  `sources.skills` line and the `sync_version` key). Never
   move/delete project skills, rules, or agents.
 - Sibling modules beside the engine module are independent — only operate on
   the discovered engine module.

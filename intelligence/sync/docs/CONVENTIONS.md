@@ -24,7 +24,7 @@ Common mistakes to avoid:
 
 ```
 intelligence/                         # Umbrella — name NOT hardcoded (whatever holds config.yaml)
-├── config.yaml                       # Sync config + `intelligence_sync_version` schema key (committed)
+├── config.yaml                       # Sync config + `sync_version` schema key (committed)
 ├── rules/                            # Path-based rules (auto-loaded by context)
 │   ├── context.md                    # Always-loaded (no paths:)
 │   ├── backend.md                    # paths: ["src/backend/**"]
@@ -249,14 +249,14 @@ Structural changes to the module layout are handled by **versioned migrations**,
 - **Bash = deterministic, fail-closed core.** It performs only mechanically safe, reversible-until-committed steps and **never guesses**. Any state it cannot resolve safely is reported, not forced.
 - **`intelligence-update` skill = intelligent layer.** It detects project state, bootstraps the engine, runs bash, interprets the status, and resolves the cases bash refuses (asking the user when genuinely ambiguous).
 
-**The schema-version contract key.** The applied schema version is a managed, top-level scalar `intelligence_sync_version` in `config.yaml` — *not* a dotfile, *not* `scripts/VERSION`. `config.yaml` is what most future breaking changes reshape, so the schema version lives with what it versions. **Invariant: this key is permanent and format-stable** — no migration may ever rename, move, or change its shape, so any engine (however old/new) can always read "what schema is this?" before parsing the rest. The bootstrap/INIT flow emits it for fresh projects (= engine `scripts/VERSION`) and must preserve it on re-bootstrap. `scripts/VERSION` = what the engine *is*; the key = what has been *applied*; the gap = pending breaking changes.
+**The schema-version contract key.** The applied schema version is a managed, top-level scalar `sync_version` in `config.yaml` — *not* a dotfile, *not* `scripts/VERSION`. `config.yaml` is what most future breaking changes reshape, so the schema version lives with what it versions. **Invariant: this key is permanent and format-stable** — no migration may ever rename, move, or change its shape, so any engine (however old/new) can always read "what schema is this?" before parsing the rest. The bootstrap/INIT flow emits it for fresh projects (= engine `scripts/VERSION`) and must preserve it on re-bootstrap. `scripts/VERSION` = what the engine *is*; the key = what has been *applied*; the gap = pending breaking changes.
 
 **Every `migrate_to_<ver>` obeys this contract**
 
 1. **Version-named & ordered.** Suffix is the target version (`migrate_to_0_3_1`); listed in `MIGRATIONS=()` ascending, append-only — never reorder or rewrite shipped migrations.
-2. **Idempotent structural precondition is the correctness mechanism.** Each migration self-detects from the actual on-disk/config structure whether its change is already applied, and is a silent no-op if so. The dispatcher runs the whole chain in order; it does **not** gate on the version stamp — so a wrong/missing `intelligence_sync_version` can never cause a needed migration to be skipped. Replaying any number of times never fails or duplicates.
+2. **Idempotent structural precondition is the correctness mechanism.** Each migration self-detects from the actual on-disk/config structure whether its change is already applied, and is a silent no-op if so. The dispatcher runs the whole chain in order; it does **not** gate on the version stamp — so a wrong/missing `sync_version` can never cause a needed migration to be skipped. Replaying any number of times never fails or duplicates.
 3. **Transactional / fail-closed.** Stage → **verify postcondition (sentinel)** → commit → only then delete the old state. A crash or partial input leaves the prior state intact; nothing is destroyed before the replacement is verified.
-4. **Version-compat guard.** A stale engine refuses to operate on a project whose `intelligence_sync_version` is newer than it understands (`ahead-of-engine`). This is the *only* role of the stamp — a guard, never a gate.
+4. **Version-compat guard.** A stale engine refuses to operate on a project whose `sync_version` is newer than it understands (`ahead-of-engine`). This is the *only* role of the stamp — a guard, never a gate.
 5. **Status hand-off is first-class.** "Cannot safely automate" is a normal outcome, reported via the contract below — not an error to paper over.
 
 **Breaking-change releases carry a `### Breaking` CHANGELOG subsection**, each item stating its post-condition. The `intelligence-update` skill reads the changelog across the version gap, surfaces these, and verifies each post-condition after applying. `sync.sh` is a pure synchronizer — it never migrates; it fails closed (`needs-update`) across an un-applied gap so a stale engine can't generate against a newer schema. `update.sh` (+ the skill) is the sole migrator.
@@ -276,7 +276,7 @@ Structural changes to the module layout are handled by **versioned migrations**,
 
 Bash emits `IS_STATUS=<code> [IS_DETAIL=...]` on stdout and exits with the matching code; callers capture it with `cmd || rc=$?` (never `if ! cmd; then exit $?` — that loses the code). The skill branches on the code.
 
-**Module model.** The engine self-locates by its own path; it does not assume a folder name (`sync/` by convention). Each `<umbrella>/<module>/` is self-contained: its own `scripts/`(+`VERSION`), `skills/`, `INIT.md`, `docs/`. Modules update independently and never touch sibling modules or project content (`rules/`, `agents/`, non-meta `skills/`) nor `config.yaml` beyond the idempotent additive `sources.skills` line and the `intelligence_sync_version` key.
+**Module model.** The engine self-locates by its own path; it does not assume a folder name (`sync/` by convention). Each `<umbrella>/<module>/` is self-contained: its own `scripts/`(+`VERSION`), `skills/`, `INIT.md`, `docs/`. Modules update independently and never touch sibling modules or project content (`rules/`, `agents/`, non-meta `skills/`) nor `config.yaml` beyond the idempotent additive `sources.skills` line and the `sync_version` key.
 
 ## .gitignore Pattern
 
@@ -304,6 +304,6 @@ The inverse pattern (`.claude/*` + `!.claude/settings.json`) ignores every gener
 |------|------|-----------|
 | `AGENTS.md` | Auto-generated canonical project doc for LLMs (do not edit manually) | Tracked |
 | `CLAUDE.md` | Local user preferences (gitignored) | Ignored |
-| `<umbrella>/config.yaml` | Sync config + `intelligence_sync_version` schema-version contract key (committed) | Tracked |
+| `<umbrella>/config.yaml` | Sync config + `sync_version` schema-version contract key (committed) | Tracked |
 | `<umbrella>/{rules,agents,skills}/` | Project source of truth | Tracked |
 | `<umbrella>/sync/` | intelligence-sync module (engine+`scripts/VERSION`, meta-skills, INIT, docs) — vendored upstream-owned | Tracked |

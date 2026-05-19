@@ -38,7 +38,7 @@ MIGRATIONS=( "0_3_1" )
 # location, or shape of this key — so any engine (however old/new) can always
 # read "what schema is this?" before parsing the rest. The bootstrap/INIT flow
 # must emit it for fresh projects and preserve it on re-bootstrap.
-IS_VERSION_KEY="intelligence_sync_version"
+IS_VERSION_KEY="sync_version"
 
 # "0_3_1" → "0.3.1"
 _mig_ver_dotted() { printf '%s' "$1" | tr '_' '.'; }

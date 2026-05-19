@@ -6,7 +6,7 @@
 project:
   name: my-platform
 
-intelligence_sync_version: "0.3.1"
+sync_version: "0.3.1"
 
 sources:
   rules:

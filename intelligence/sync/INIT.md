@@ -196,7 +196,7 @@ If **Accept** -- execute migration (if needed), then generate.
 
 ### 3.1 `intelligence/config.yaml`
 
-Set `intelligence_sync_version` to the engine version — read it verbatim from
+Set `sync_version` to the engine version — read it verbatim from
 `intelligence/sync/scripts/VERSION`. This is a **managed contract key**: emit
 it on first bootstrap and **preserve its existing value if `config.yaml`
 already has one** when re-bootstrapping (never drop or guess it — the update
@@ -208,7 +208,7 @@ project:
 
 # Managed by intelligence-sync — applied schema version. Do not hand-edit;
 # preserve on re-bootstrap. (Value = intelligence/sync/scripts/VERSION.)
-intelligence_sync_version: "0.3.1"
+sync_version: "0.3.1"
 
 sources:
   rules:
