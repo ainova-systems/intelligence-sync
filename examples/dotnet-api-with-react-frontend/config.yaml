@@ -17,6 +17,7 @@ sources:
     - "frontend/intelligence/agents"
   skills:
     - "intelligence/skills"
+    - "intelligence/sync/skills"
     - "backend/intelligence/skills"
     - "frontend/intelligence/skills"
 

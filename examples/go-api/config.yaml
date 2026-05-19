@@ -11,6 +11,7 @@ sources:
     - "intelligence/agents"
   skills:
     - "intelligence/skills"
+    - "intelligence/sync/skills"
 
 targets:
   agents:

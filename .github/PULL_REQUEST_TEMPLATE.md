@@ -12,7 +12,7 @@
 
 ## Verification
 
-- [ ] `bash intelligence/scripts/sync.sh` runs cleanly against an example project (note which `examples/<dir>/`)
+- [ ] `bash intelligence/sync/scripts/sync.sh` runs cleanly against an example project (note which `examples/<dir>/`)
 - [ ] `lint_frontmatter` produces no new warnings
 - [ ] Adapter changes tested with an actual IDE (note which one and what behavior was confirmed)
 - [ ] Documentation updated (`README.md`, `docs/CONVENTIONS.md`, `docs/ADAPTERS.md`, `intelligence/INIT.md` as relevant)

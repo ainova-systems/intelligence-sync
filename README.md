@@ -61,24 +61,26 @@ cp -r intelligence-sync/intelligence/ my-project/intelligence/
 Copy and paste this prompt into Claude Code, Cursor, or any AI coding assistant:
 
 ```
-Read intelligence/INIT.md and follow it to bootstrap rules, agents, and skills for this project.
+Read intelligence/sync/INIT.md and follow it to bootstrap rules, agents, and skills for this project.
 ```
 
 ### 3. Run sync
 
 ```bash
-bash intelligence/scripts/sync.sh
+bash intelligence/sync/scripts/sync.sh
 ```
 
 Or use the `/intelligence-sync` skill directly in your AI coding assistant.
 
 ### Upgrading
 
-To pull the latest engine (`scripts/` + `INIT.md`) without touching your `config.yaml`, `rules/`, `agents/`, or `skills/`:
+To pull the latest engine module without touching your `config.yaml`, `rules/`, `agents/`, or project `skills/`:
 
 ```bash
-bash intelligence/scripts/update.sh
+bash intelligence/sync/scripts/update.sh
 ```
+
+Pre-0.3.1 projects (engine flat under `intelligence/`) are migrated transparently into `intelligence/sync/` on the next `update`/`sync` — meta-skills are moved (never duplicated), and a single additive line is added to `config.yaml` `sources.skills`. The migration is idempotent.
 
 The script clones upstream into a temp dir (cross-platform `mktemp`), shows a diff, and prompts before applying. Pass `--yes` to skip the prompt, or `REPO_URL=<your-fork>` to use a fork.
 
@@ -123,25 +125,26 @@ Cursor, Copilot, and Codex all read AGENTS.md natively — always-on rules are i
 ```
 intelligence-sync/
 ├── intelligence/                # COPY THIS FOLDER to your project
-│   ├── INIT.md                  # Bootstrap prompt for AI assistants
-│   ├── scripts/                 # Sync engine (bash, zero dependencies)
-│   │   ├── sync.sh              # Entry point — generate IDE outputs
-│   │   ├── update.sh            # Self-update from upstream
-│   │   ├── lib/common.sh        # Core functions
-│   │   └── adapters/            # 5 built-in + template
-│   │       ├── agents.sh        # AGENTS.md (canonical)
-│   │       ├── claude.sh        # .claude/
-│   │       ├── cursor.sh        # .cursor/
-│   │       ├── copilot.sh       # .github/
-│   │       ├── codex.sh         # .agents/skills/, .codex/agents/
-│   │       └── _template.sh     # Starting point for new adapters
-│   ├── rules/                   # Your rules go here
-│   ├── agents/                  # Your agents go here
-│   └── skills/                  # Pre-installed skills + your own
+│   ├── config.yaml              # Sync configuration (you create via INIT)
+│   ├── rules/                   # Your rules go here          ← project content
+│   ├── agents/                  # Your agents go here         ← project content
+│   ├── skills/                  # Your skills go here         ← project content
+│   └── sync/                    # intelligence-sync MODULE (upstream-owned, self-update)
+│       ├── INIT.md              # Bootstrap prompt for AI assistants
+│       ├── docs/                # Vendored conventions + adapter guide
+│       ├── scripts/             # Sync engine (bash, zero dependencies)
+│       │   ├── sync.sh          # Entry point — generate IDE outputs
+│       │   ├── update.sh        # Self-update from upstream
+│       │   ├── VERSION          # Module version (drives migrations)
+│       │   ├── lib/             # common.sh, layout.sh, migrations.sh
+│       │   └── adapters/        # 5 built-in + template
+│       └── skills/intelligence-*  # Pre-installed meta-skills
 ├── examples/                    # config.yaml for different project types
-├── docs/                        # Conventions and adapter guide
+├── docs/                        # Conventions and adapter guide (source)
 └── LICENSE                      # MIT License
 ```
+
+Each `intelligence/<module>/` (e.g. `sync/`, future `brain/`) is self-contained and updated independently. The umbrella folder name (`intelligence/`) is never hardcoded — it is whatever holds `config.yaml`.
 
 ## Examples
 
@@ -151,7 +154,7 @@ intelligence-sync/
 
 ## Documentation
 
-- [intelligence/INIT.md](intelligence/INIT.md) -- Bootstrap prompt for AI assistants
+- [intelligence/sync/INIT.md](intelligence/sync/INIT.md) -- Bootstrap prompt for AI assistants
 - [docs/CONVENTIONS.md](docs/CONVENTIONS.md) -- Frontmatter formats, naming, mappings
 - [docs/ADAPTERS.md](docs/ADAPTERS.md) -- How to write a new IDE adapter
 - [CONTRIBUTING.md](CONTRIBUTING.md) -- How to contribute
