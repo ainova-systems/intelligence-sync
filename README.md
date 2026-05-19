@@ -78,7 +78,7 @@ Tell your AI coding agent:
 
 > **Update intelligence-sync**
 
-The `intelligence-update` skill fetches the latest engine, drives any layout migration, resolves issues, and verifies the result — without touching your `config.yaml`, `rules/`, `agents/`, or project `skills/`. Idempotent and safe to repeat.
+The `intelligence-update` skill fetches the latest engine, drives any layout migration, resolves issues, and verifies the result. Your project-authored content — `rules/`, `agents/`, project `skills/`, and everything you wrote in `config.yaml` — is left intact; the only managed `config.yaml` edits are the engine's own keys: the `intelligence_sync_version` schema stamp and the additive `sources.skills` module entry a migration adds. Idempotent and safe to repeat.
 
 Directly, if you prefer: `bash intelligence/sync/scripts/update.sh`.
 

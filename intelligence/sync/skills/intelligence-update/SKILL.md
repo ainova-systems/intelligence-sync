@@ -47,37 +47,54 @@ role: search `<umbrella>` (one level deep) for a directory `<M>` with both
 - No `config.yaml` at all → not bootstrapped; point the user at upstream
   `INIT.md` and stop.
 
-### 2. Fetch upstream & ensure a current engine is present
+### 2. Fetch upstream (read-only) — do NOT write into the project yet
 Clone upstream into a temp dir (default
 `https://github.com/ainova-systems/intelligence-sync`, or the user's
 `REPO_URL`/fork). The upstream module is always `intelligence/sync/`.
 
-Place/refresh it so a current, migration-aware engine exists locally even on
-a pre-0.3.1 project:
-
 ```
 git clone --depth=1 <repo> <tmp>
-mkdir -p <umbrella>/sync
-cp -r <tmp>/intelligence/sync/. <umbrella>/sync/
 ```
 
-(Idempotent and authoritative — `update.sh` re-clones internally.)
+**Make no changes to the project before step 3's confirmation.** In
+particular do not copy anything into `<umbrella>/sync` yet — that would
+modify (and could downgrade) an already-modular project even if the user then
+declines. The temp clone is only for reading the CHANGELOG and as the source
+for the eventual write.
 
 ### 3. Understand what is changing (changelog-aware)
-Read `<tmp>/CHANGELOG.md`. Determine the project's current version (the
-`intelligence_sync_version` value in `config.yaml`, or "pre-0.3.1" if the key
-is absent) and the engine version (`<tmp>/intelligence/sync/scripts/VERSION`).
+Determine the project's current version = the `intelligence_sync_version`
+value in `config.yaml`, or `0.0.0` if the key is absent (pre-0.3.1). The
+engine version = `<tmp>/intelligence/sync/scripts/VERSION`.
 
-For every release **strictly between** the project version and the engine
-version, read its entry. Pay special attention to any **`### Breaking`**
-subsection (the machine-distinguishable marker for breaking changes). Build a
-short list of: breaking items, new migrations, and anything the user must know
-or that you must verify afterward. Surface this to the user before applying
-(and, without `--yes`, let them confirm).
+Read `<tmp>/CHANGELOG.md`. For every release in the range
+**`current < release <= engine`** (inclusive of the target release — its
+entry holds the destination's breaking post-conditions), read its entry. Pay
+special attention to any **`### Breaking`** subsection (the
+machine-distinguishable marker). Build a short list of breaking items, new
+migrations, and anything to verify afterward. Surface it to the user; without
+`--yes`, let them confirm before any write.
+
+### 3a. Ensure the engine to run (only now, post-confirmation)
+- **Modular project** (a module engine was discovered in step 1): run *its*
+  `update.sh` — at the discovered module dir, whatever its name. `update.sh`
+  re-clones upstream internally, shows the diff, and is authoritative; do not
+  hand-copy over the module.
+- **No module engine** (pre-0.3.1 flat or un-bootstrapped): only here create
+  the module from the temp clone, and only after confirmation:
+  ```
+  mkdir -p <umbrella>/sync
+  cp -r <tmp>/intelligence/sync/. <umbrella>/sync/
+  ```
+  then run `<umbrella>/sync/scripts/update.sh`.
 
 ### 4. Run the engine
+Run the `update.sh` of the engine determined in 3a — the **discovered module
+dir** for a modular project (whatever its name), or the just-created
+`<umbrella>/sync` for the legacy bootstrap path:
+
 ```
-bash <umbrella>/sync/scripts/update.sh --yes   # omit --yes to confirm the diff
+bash <engine-module>/scripts/update.sh --yes   # omit --yes to confirm the diff
 ```
 Capture stdout; find the last `IS_STATUS=<code> [IS_DETAIL=...]` line.
 
