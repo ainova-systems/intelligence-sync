@@ -4,6 +4,8 @@
 project:
   name: my-api
 
+intelligence_sync_version: "0.3.1"
+
 sources:
   rules:
     - "intelligence/rules"
@@ -11,6 +13,7 @@ sources:
     - "intelligence/agents"
   skills:
     - "intelligence/skills"
+    - "intelligence/sync/skills"
 
 targets:
   agents:

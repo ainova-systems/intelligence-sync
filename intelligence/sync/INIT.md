@@ -10,7 +10,7 @@ This document is read by an AI agent and contains many literal references to `in
 
 1. Identify the directory that contains this `INIT.md` and a `scripts/sync.sh` file. Call its basename `<intel>`.
 2. Throughout the rest of this document, every reference to `intelligence/` means `<intel>/` — substitute it consistently in every path you write (`config.yaml` `sources:`, `targets.agents.header` Markdown links, generated content, skill instructions).
-3. Do NOT create a second folder named `intelligence/` if `<intel>` is already different. The sync engine is folder-name-agnostic — `bash <intel>/scripts/sync.sh` works regardless of casing or naming.
+3. Do NOT create a second folder named `intelligence/` if `<intel>` is already different. The sync engine is folder-name-agnostic — `bash <intel>/sync/scripts/sync.sh` works regardless of casing or naming.
 
 If the user has not renamed it, `<intel>` is `intelligence` and the literal text below applies as-is.
 
@@ -28,9 +28,9 @@ If the user has not renamed it, `<intel>` is `intelligence` and the literal text
 
 Before starting, verify:
 
-1. `intelligence/scripts/sync.sh` exists
-2. `intelligence/scripts/lib/common.sh` exists
-3. `intelligence/scripts/adapters/claude.sh` exists
+1. `intelligence/sync/scripts/sync.sh` exists
+2. `intelligence/sync/scripts/lib/common.sh` exists
+3. `intelligence/sync/scripts/adapters/claude.sh` exists
 4. Check initialization state:
    - **Already initialized** = `intelligence/config.yaml` exists AND `intelligence/rules/` contains at least one `.md` file
    - **Partially initialized** = either exists but not both
@@ -43,9 +43,9 @@ If files from steps 1-3 are missing, tell the user to copy the `intelligence/` d
 If the project is **already initialized** (config + rules present), do NOT run the full bootstrap. Instead:
 
 1. Check if local IDE output is missing or stale: for each enabled target in `config.yaml`, see whether the output path exists (e.g., `.claude/`, `.cursor/`, `AGENTS.md`). If any are missing, this is a new clone / new team member.
-2. Tell the user: "This project is already initialized. I can just run `bash intelligence/scripts/sync.sh` to generate your local IDE files from `intelligence/`."
+2. Tell the user: "This project is already initialized. I can just run `bash intelligence/sync/scripts/sync.sh` to generate your local IDE files from `intelligence/`."
 3. Offer two options:
-   - **Sync** — run `intelligence/scripts/sync.sh` and exit (do not touch rules/agents/skills/config)
+   - **Sync** — run `intelligence/sync/scripts/sync.sh` and exit (do not touch rules/agents/skills/config)
    - **Re-initialize** — wipe existing rules/agents/skills and regenerate (destructive; only if the user explicitly wants a fresh bootstrap)
 4. Default to sync. Only proceed to Phase 1 if the user explicitly chooses re-initialize.
 
@@ -175,7 +175,7 @@ If **Accept** -- execute migration (if needed), then generate.
    - Build a list of the paths that were removed/renamed (e.g., `dev/scripts/`, `dev/prompts/`, `.cursorrules`, `.claude/rules/`, old directory names).
    - Run `git ls-files` to enumerate every tracked file in the repository (no whitelist -- references to old paths live in `README.md`, scripts, config files, wikis, workflow YAML, not just `docs/`).
    - For each tracked file, grep for each removed path. Record findings.
-   - For unambiguous replacements (e.g., `dev/scripts/sync-to-claude.sh` -> `intelligence/scripts/sync.sh`), patch the file automatically.
+   - For unambiguous replacements (e.g., `dev/scripts/sync-to-claude.sh` -> `intelligence/sync/scripts/sync.sh`), patch the file automatically.
    - For ambiguous references (path removed without a clear successor, references inside narrative prose, references to scripts that no longer exist), print them to the user grouped by file with line numbers and ask how to resolve.
    - Do not proceed to Phase 3 generation until stale references are resolved or explicitly deferred by the user.
 
@@ -196,9 +196,19 @@ If **Accept** -- execute migration (if needed), then generate.
 
 ### 3.1 `intelligence/config.yaml`
 
+Set `intelligence_sync_version` to the engine version — read it verbatim from
+`intelligence/sync/scripts/VERSION`. This is a **managed contract key**: emit
+it on first bootstrap and **preserve its existing value if `config.yaml`
+already has one** when re-bootstrapping (never drop or guess it — the update
+flow owns its value).
+
 ```yaml
 project:
   name: "project-name"
+
+# Managed by intelligence-sync — applied schema version. Do not hand-edit;
+# preserve on re-bootstrap. (Value = intelligence/sync/scripts/VERSION.)
+intelligence_sync_version: "0.3.1"
 
 sources:
   rules:
@@ -207,6 +217,7 @@ sources:
     - "intelligence/agents"
   skills:
     - "intelligence/skills"
+    - "intelligence/sync/skills"
 
 targets:
   # agents: ALWAYS enabled — generates committed AGENTS.md as the
@@ -232,7 +243,7 @@ ignore:
   - "dist"
 
 # Optional: override per-IDE tier -> model mappings. Defaults live in
-# intelligence/scripts/lib/common.sh. Add only the entries you want to
+# intelligence/sync/scripts/lib/common.sh. Add only the entries you want to
 # pin; everything else uses the current default.
 # Example:
 # models:
@@ -242,7 +253,7 @@ ignore:
 
 The `agents.header` block is the only hand-authored part of `AGENTS.md`. Everything else (tables for agents/skills, list of rules) is regenerated from frontmatter on every sync. Keep the header to 3–5 lines: project name, one-liner stack summary, link to `context.md`.
 
-Engine scripts (under `intelligence/scripts/`):
+Engine scripts (under `intelligence/sync/scripts/`):
 
 - `sync.sh` — generate IDE outputs from `intelligence/`
 - `update.sh` — pull latest scripts/INIT.md from upstream without touching project content
@@ -361,24 +372,24 @@ Notes:
 
 ### 3.7 `AGENTS.md` (auto-generated by `agents.sh`)
 
-`AGENTS.md` is produced by the `agents` adapter on every sync. It is NOT hand-authored. Do not create this file yourself in Phase 3 -- it will be generated in Phase 4 by `intelligence/scripts/sync.sh`.
+`AGENTS.md` is produced by the `agents` adapter on every sync. It is NOT hand-authored. Do not create this file yourself in Phase 3 -- it will be generated in Phase 4 by `intelligence/sync/scripts/sync.sh`.
 
 Your job in Phase 3 is to fill `targets.agents.header` in `config.yaml` (see 3.1) with a 3-5 line project summary: title, stack one-liner, link to `intelligence/rules/context.md`. The adapter appends auto-built tables for agents/skills and a list of rules after the header.
 
-The file is committed (not gitignored) but carries a `<!-- Generated ... do not edit manually -->` marker. All regeneration happens via `bash intelligence/scripts/sync.sh`.
+The file is committed (not gitignored) but carries a `<!-- Generated ... do not edit manually -->` marker. All regeneration happens via `bash intelligence/sync/scripts/sync.sh`.
 
 ### 3.8 `CLAUDE.md` (if Claude enabled)
 
 Gitignored user preferences:
 - Response language
-- Setup: `intelligence/scripts/sync.sh`
+- Setup: `intelligence/sync/scripts/sync.sh`
 - Helper scripts, git commit rules
 
 ---
 
 ## Phase 4: Verify
 
-1. Run `intelligence/scripts/sync.sh`
+1. Run `intelligence/sync/scripts/sync.sh`
 2. If sync fails -- read the error, fix the cause (usually missing directory or malformed frontmatter), retry
 3. Verify output counts match expectations
 4. Report to user:

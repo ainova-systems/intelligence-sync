@@ -35,5 +35,5 @@ labels: bug
 ## Sync output
 
 ```
-# Paste the output of `bash intelligence/scripts/sync.sh` (or the failing target only)
+# Paste the output of `bash intelligence/sync/scripts/sync.sh` (or the failing target only)
 ```

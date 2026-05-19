@@ -9,7 +9,7 @@ argument-hint: <target-name>
 ## Steps
 
 1. Check if target `$ARGUMENTS` is already enabled in `intelligence/config.yaml` — if yes, report and stop
-2. Check if adapter exists in `intelligence/scripts/adapters/$ARGUMENTS.sh`
+2. Check if adapter exists in `intelligence/sync/scripts/adapters/$ARGUMENTS.sh`
    - If not, research the IDE's prompt format via web search and create adapter using `_template.sh` as reference
 3. Update `intelligence/config.yaml`:
    - If target exists with `enabled: false` — change to `enabled: true`

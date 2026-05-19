@@ -1,19 +1,68 @@
 #!/bin/bash
 # intelligence-sync: Unified sync entry point
-# Reads config.yaml from the intelligence folder and syncs to all enabled targets.
+# Reads config.yaml from the umbrella folder and syncs to all enabled targets.
 #
 # Usage:
-#   bash intelligence/scripts/sync.sh              # Sync all enabled targets
-#   bash intelligence/scripts/sync.sh claude       # Sync only Claude
-#   bash intelligence/scripts/sync.sh cursor       # Sync only Cursor
+#   bash <umbrella>/sync/scripts/sync.sh           # Sync all enabled targets
+#   bash <umbrella>/sync/scripts/sync.sh claude    # Sync only Claude
+#   bash <umbrella>/sync/scripts/sync.sh cursor    # Sync only Cursor
 #
-# Config: config.yaml in parent of scripts/ (the intelligence folder).
-# REPO_ROOT: auto-detected from git, or override with env var.
+# Layout-agnostic: detect_layout finds the umbrella (the dir holding
+# config.yaml; name not hardcoded) and migrates a pre-0.3.1 flat layout into
+# the <umbrella>/sync/ module. REPO_ROOT: auto-detected from git, or via env.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-INTELLIGENCE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/layout.sh"
+source "$SCRIPT_DIR/lib/migrations.sh"
+
+# Umbrella = whatever folder holds config.yaml (name not hardcoded). The
+# module is wherever this script lives — sync.sh self-locates and does NOT
+# assume a folder name.
+detect_layout "$SCRIPT_DIR"
+INTELLIGENCE_DIR="$LS_UMBRELLA_DIR"
+
+# sync.sh is a PURE synchronizer — it is not a migrator. Migration across a
+# breaking-change gap is owned solely by the intelligence-update flow
+# (update.sh + skill). sync refuses to run across an un-applied gap so a
+# stale/mismatched engine can never generate against a newer layout.
+if [ "$LS_LAYOUT" != "modular" ]; then
+    is_status needs-update "layout=$LS_LAYOUT"
+    echo "ERROR: engine is not in the modular layout (layout=$LS_LAYOUT)." >&2
+    echo "       Run the update flow: tell your agent \"Update intelligence-sync\"." >&2
+    exit "$IS_RC_NEEDS_UPDATE"
+fi
+
+# Schema version lives in config.yaml (the frozen contract key).
+_cf="${CONFIG_FILE:-$INTELLIGENCE_DIR/config.yaml}"
+
+# Stale engine vs project schema stamped NEWER (ahead-of-engine) → refuse.
+_vc_rc=0
+check_version_compat "$_cf" || _vc_rc=$?
+if [ "$_vc_rc" -ne 0 ]; then exit "$_vc_rc"; fi
+
+# Schema gap → refuse; the update flow must apply the migration chain first.
+# Per the contract, an ABSENT stamp means pre-0.3.1 / un-applied schema — a
+# modular tree with no `intelligence_sync_version` must NOT silently sync
+# (that would bypass migrations). A correctly bootstrapped project always has
+# the key (INIT emits it; update.sh stamps it).
+_stamp="$(read_engine_stamp "$_cf")"
+_eng="$(engine_version)"
+if [ -z "$_stamp" ]; then
+    is_status needs-update "stamped= engine=$_eng (no intelligence_sync_version)"
+    echo "ERROR: config.yaml has no intelligence_sync_version — schema un-applied." >&2
+    echo "       Run the update flow first: tell your agent \"Update intelligence-sync\"." >&2
+    exit "$IS_RC_NEEDS_UPDATE"
+elif [ -n "$_eng" ] && _ver_gt "$_eng" "$_stamp"; then
+    is_status needs-update "stamped=$_stamp engine=$_eng"
+    echo "ERROR: project at $_stamp but engine is $_eng — pending breaking changes." >&2
+    echo "       Run the update flow first: tell your agent \"Update intelligence-sync\"." >&2
+    exit "$IS_RC_NEEDS_UPDATE"
+fi
+
 # Normalize REPO_ROOT to the same `cd && pwd` style as INTELLIGENCE_DIR so
 # prefix-stripping in path comparisons works (Git Bash on Windows: git
 # rev-parse returns `D:/...` while cd && pwd returns `/d/...`; the styles
@@ -22,7 +71,7 @@ REPO_ROOT_RAW="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || (cd "
 REPO_ROOT="$(cd "$REPO_ROOT_RAW" && pwd)"
 unset REPO_ROOT_RAW
 
-# Config: explicit env > config.yaml in intelligence folder
+# Config: explicit env > config.yaml in the umbrella folder
 if [ -n "${CONFIG_FILE:-}" ]; then
     CONFIG_FILE="$CONFIG_FILE"
 elif [ -f "$INTELLIGENCE_DIR/config.yaml" ]; then
@@ -31,13 +80,12 @@ else
     CONFIG_FILE=""
 fi
 
-source "$SCRIPT_DIR/lib/common.sh"
-
 if [ -z "$CONFIG_FILE" ] || [ ! -f "$CONFIG_FILE" ]; then
+    is_status config-missing "umbrella=$INTELLIGENCE_DIR"
     echo "ERROR: Config file not found."
     echo "Looked for: config.yaml (in $INTELLIGENCE_DIR)"
     echo "Run INIT.md bootstrap or create config.yaml manually."
-    exit 1
+    exit "$IS_RC_CONFIG_MISSING"
 fi
 
 TARGET_FILTER="${1:-}"
@@ -150,4 +198,6 @@ warn_unsynced "$REPO_ROOT" "$CONFIG_FILE"
 report_model_drift "$CONFIG_FILE"
 
 echo ""
+# sync.sh never migrates (the update flow owns that), so success is always ok.
+is_status ok "synced=$synced"
 echo "=== Done: $synced target(s) synced ==="

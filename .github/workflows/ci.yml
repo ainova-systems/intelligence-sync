@@ -18,11 +18,34 @@ jobs:
       - name: Run shellcheck
         run: |
           shellcheck --version
-          # Skip the adapter template — `<name>` placeholders are intentional
-          # and would be parsed as input redirection by shellcheck/bash.
-          find intelligence/scripts -name '*.sh' \
-            -not -path 'intelligence/scripts/adapters/_template.sh' \
+          # Skip the adapter template — `<name>` placeholders are parsed as
+          # input redirection by bash/shellcheck.
+          find intelligence/sync/scripts -name '*.sh' \
+            -not -path '*/adapters/_template.sh' \
             -print0 | xargs -0 shellcheck --severity=warning
+
+  repo-purity:
+    name: repo-purity (no flat twin / zero duplication)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Repo must be pure-modular — no flat bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail=0
+          for p in intelligence/scripts intelligence/INIT.md; do
+            if [ -e "$p" ]; then echo "DUPLICATION: $p must not exist"; fail=1; fi
+          done
+          if [ -n "$(find intelligence/skills -maxdepth 1 -name 'intelligence-*' 2>/dev/null)" ]; then
+            echo "DUPLICATION: intelligence/skills/intelligence-* must live only in intelligence/sync/skills/"; fail=1
+          fi
+          test -f intelligence/sync/scripts/sync.sh
+          test -f intelligence/sync/scripts/VERSION
+          # Vendored docs must mirror the doc source exactly.
+          diff -rq docs intelligence/sync/docs
+          [ "$fail" -eq 0 ] && echo "OK: pure-modular, single source, no duplication"
+          exit $fail
 
   smoke:
     name: smoke (sync against examples)
@@ -34,27 +57,23 @@ jobs:
         example: [go-api, dotnet-api-with-react-frontend, platform-with-submodules]
     steps:
       - uses: actions/checkout@v6
-      - name: Stage example as project root
+      - name: Stage example as project root (modular layout)
         shell: bash
         run: |
           set -euo pipefail
           PROJ=$RUNNER_TEMP/proj
           mkdir -p "$PROJ/intelligence"
-          cp -r intelligence/scripts intelligence/INIT.md "$PROJ/intelligence/"
+          cp -r intelligence/sync "$PROJ/intelligence/sync"
           cp examples/${{ matrix.example }}/config.yaml "$PROJ/intelligence/config.yaml"
 
           mkdir -p "$PROJ/intelligence/rules" "$PROJ/intelligence/agents" "$PROJ/intelligence/skills"
 
-          # Always-on rule (no `paths:`) — should be inlined into AGENTS.md
-          # and copied into .claude/rules/ but skipped by Cursor / Copilot.
           cat > "$PROJ/intelligence/rules/context.md" <<'EOF'
           # Always-on context
 
           Use this for project-wide standards.
           EOF
 
-          # Path-scoped rule — should land in .cursor/rules/ + .github/instructions/.
-          # Description deliberately contains a colon to exercise frontmatter parsing.
           cat > "$PROJ/intelligence/rules/backend.md" <<'EOF'
           ---
           paths:
@@ -67,7 +86,6 @@ jobs:
           Some scoped guidance.
           EOF
 
-          # Agent with description containing a colon and special chars.
           cat > "$PROJ/intelligence/agents/backend-developer.md" <<'EOF'
           ---
           name: backend-developer
@@ -81,7 +99,6 @@ jobs:
           Builds new endpoints.
           EOF
 
-          # Skill — exercises Codex `.agents/skills/` write path.
           mkdir -p "$PROJ/intelligence/skills/backend-add-endpoint"
           cat > "$PROJ/intelligence/skills/backend-add-endpoint/SKILL.md" <<'EOF'
           ---
@@ -103,21 +120,20 @@ jobs:
         shell: bash
         run: |
           cd "$PROJ"
-          bash intelligence/scripts/sync.sh
+          out=$(bash intelligence/sync/scripts/sync.sh)
+          echo "$out"
+          echo "$out" | grep -q 'IS_STATUS=ok' || { echo "missing IS_STATUS=ok"; exit 1; }
 
       - name: Verify AGENTS.md
         shell: bash
         run: |
           set -euo pipefail
           test -f "$PROJ/AGENTS.md"
-          # Always-on rule must be inlined.
           grep -q "Use this for project-wide standards" "$PROJ/AGENTS.md"
-          # Backend agent must be listed.
           grep -q "backend-developer" "$PROJ/AGENTS.md"
-          # Skill must be listed.
           grep -q "backend-add-endpoint" "$PROJ/AGENTS.md"
 
-      - name: Verify Claude output (if enabled)
+      - name: Verify Claude / Cursor / Copilot / Codex outputs (if enabled)
         shell: bash
         run: |
           set -euo pipefail
@@ -126,56 +142,226 @@ jobs:
             test -f "$PROJ/.claude/rules/backend.md"
             test -f "$PROJ/.claude/agents/backend-developer.md"
             test -f "$PROJ/.claude/skills/backend-add-endpoint/SKILL.md"
-            # Description with colon must survive parsing.
-            grep -q "Implements backend features: APIs, services" \
-              "$PROJ/.claude/agents/backend-developer.md" || true
           fi
-
-      - name: Verify Cursor output (if enabled)
-        shell: bash
-        run: |
-          set -euo pipefail
           if [ -d "$PROJ/.cursor" ]; then
-            # Always-on rule must NOT be emitted to .cursor/rules/.
             ! test -e "$PROJ/.cursor/rules/context.mdc"
-            # Path-scoped rule must be emitted with globs.
             test -f "$PROJ/.cursor/rules/backend.mdc"
             grep -q "globs:" "$PROJ/.cursor/rules/backend.mdc"
-            test -f "$PROJ/.cursor/agents/backend-developer.md"
           fi
-
-      - name: Verify Copilot output (if enabled)
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -d "$PROJ/.github/instructions" ] || [ -d "$PROJ/.github/agents" ]; then
-            # Always-on rule must NOT produce copilot-instructions.md.
+          if [ -d "$PROJ/.github/instructions" ]; then
             ! test -e "$PROJ/.github/copilot-instructions.md"
-            # Path-scoped rule -> .instructions.md with applyTo.
             test -f "$PROJ/.github/instructions/backend.instructions.md"
             grep -q "applyTo:" "$PROJ/.github/instructions/backend.instructions.md"
           fi
+          if [ -d "$PROJ/.codex" ]; then
+            test -f "$PROJ/.codex/agents/backend-developer.toml"
+            grep -q 'description = "Implements backend features: APIs, services"' \
+              "$PROJ/.codex/agents/backend-developer.toml"
+            ! test -e "$PROJ/CODEX.md"
+            test -f "$PROJ/.agents/skills/backend-add-endpoint/SKILL.md"
+          fi
 
-      - name: Verify Codex output (if enabled)
+  migration:
+    name: migration (legacy -> sync, idempotent, fail-closed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Stage a pre-0.3.1 flat project (helper)
         shell: bash
         run: |
           set -euo pipefail
-          if [ -d "$PROJ/.codex" ]; then
-            test -f "$PROJ/.codex/agents/backend-developer.toml"
-            # Description with colon must be preserved verbatim inside quotes.
-            grep -q 'description = "Implements backend features: APIs, services"' \
-              "$PROJ/.codex/agents/backend-developer.toml"
-            grep -q 'model_reasoning_effort = "high"' \
-              "$PROJ/.codex/agents/backend-developer.toml"
-            grep -q 'sandbox_mode = "workspace-write"' \
-              "$PROJ/.codex/agents/backend-developer.toml"
-            # No CODEX.md should be generated.
-            ! test -e "$PROJ/CODEX.md"
-            # No .codex/config.toml should be generated.
-            ! test -e "$PROJ/.codex/config.toml"
-            # Skills go to .agents/skills/.
-            test -f "$PROJ/.agents/skills/backend-add-endpoint/SKILL.md"
-          fi
+          cat > "$RUNNER_TEMP/stage.sh" <<'STAGE'
+          stage_legacy() {
+            local proj="$1"
+            mkdir -p "$proj/intelligence"/{rules,agents,skills}
+            # Simulate pre-0.3.1 flat layout using the current engine.
+            cp -r intelligence/sync/scripts "$proj/intelligence/scripts"
+            cp    intelligence/sync/INIT.md "$proj/intelligence/INIT.md"
+            cp -r intelligence/sync/skills/intelligence-sync   "$proj/intelligence/skills/"
+            cp -r intelligence/sync/skills/intelligence-update  "$proj/intelligence/skills/"
+            # A project skill that MUST survive untouched.
+            mkdir -p "$proj/intelligence/skills/backend-add-endpoint"
+            printf -- '---\nname: backend-add-endpoint\ndescription: "Add endpoint"\n---\n# Add endpoint\n' \
+              > "$proj/intelligence/skills/backend-add-endpoint/SKILL.md"
+            printf '# Always-on context\n' > "$proj/intelligence/rules/context.md"
+            cat > "$proj/intelligence/config.yaml" <<'EOF'
+          project:
+            name: legacy
+          sources:
+            rules:
+              - "intelligence/rules"
+            agents:
+              - "intelligence/agents"
+            skills:
+              - "intelligence/skills"
+          targets:
+            agents:
+              enabled: true
+              output: "AGENTS.md"
+              header: |
+                # Legacy
+          EOF
+            git -C "$proj" init -q
+            git -C "$proj" add -A
+            git -C "$proj" -c user.email=ci@example.com -c user.name=ci commit -q -m init
+          }
+          STAGE
+          echo "STAGE_LIB=$RUNNER_TEMP/stage.sh" >> "$GITHUB_ENV"
+
+      - name: sync.sh on legacy fails closed with needs-update (never migrates)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$STAGE_LIB"
+          PROJ=$RUNNER_TEMP/legacy1
+          stage_legacy "$PROJ"
+          cd "$PROJ"
+          set +e
+          out=$(bash intelligence/scripts/sync.sh); rc=$?
+          set -e
+          echo "$out"
+          [ "$rc" -eq 6 ] || { echo "expected exit 6 (needs-update), got $rc"; exit 1; }
+          echo "$out" | grep -q 'IS_STATUS=needs-update' || { echo "missing needs-update"; exit 1; }
+          # sync.sh must NOT migrate or generate anything.
+          test -d intelligence/scripts
+          test -d intelligence/skills/intelligence-sync
+          ! test -d intelligence/sync
+          ! test -f AGENTS.md
+
+      - name: update.sh migrates (config-key stamp) + idempotent re-run
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$STAGE_LIB"
+          PROJ=$RUNNER_TEMP/legacy2
+          stage_legacy "$PROJ"
+          cd "$PROJ"
+
+          out=$(REPO_URL="file://$GITHUB_WORKSPACE" bash intelligence/scripts/update.sh --yes)
+          echo "$out"
+          echo "$out" | grep -q 'IS_STATUS=migrated' || { echo "expected IS_STATUS=migrated"; exit 1; }
+          test -f intelligence/sync/scripts/sync.sh
+          # Schema version is a config.yaml key (not a dotfile).
+          ! test -e intelligence/sync/.intelligence-sync-version
+          grep -Eq '^intelligence_sync_version: *"[0-9]' intelligence/config.yaml
+          test "$(grep -c '^intelligence_sync_version:' intelligence/config.yaml)" -eq 1
+          ! test -d intelligence/scripts
+          [ -z "$(find intelligence/skills -maxdepth 1 -name 'intelligence-*')" ]
+          test -f intelligence/skills/backend-add-endpoint/SKILL.md
+          test "$(grep -c '"intelligence/sync/skills"' intelligence/config.yaml)" -eq 1
+
+          out2=$(REPO_URL="file://$GITHUB_WORKSPACE" bash intelligence/sync/scripts/update.sh --yes)
+          echo "$out2" | grep -q 'IS_STATUS=ok' || { echo "expected IS_STATUS=ok on re-run"; exit 1; }
+          test "$(grep -c '^intelligence_sync_version:' intelligence/config.yaml)" -eq 1
+          # Now modular & current → sync.sh works and is ok.
+          s=$(bash intelligence/sync/scripts/sync.sh); echo "$s" | grep -q 'IS_STATUS=ok'
+          test -f AGENTS.md
+
+      - name: Multi-version chain walks forward (0.3.1 → 0.4.0), idempotent
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$STAGE_LIB"
+          # An upstream with a synthetic SECOND breaking migration appended.
+          UP=$RUNNER_TEMP/up040
+          mkdir -p "$UP"
+          tar --exclude='.git' -cf - . | (cd "$UP" && tar -xf -)
+          M="$UP/intelligence/sync/scripts/lib/migrations.sh"
+          printf '0.4.0\n' > "$UP/intelligence/sync/scripts/VERSION"
+          sed -i 's/^MIGRATIONS=( "0_3_1" )/MIGRATIONS=( "0_3_1" "0_4_0" )/' "$M"
+          cat >> "$M" <<'EOF'
+
+          # synthetic breaking migration for CI: structural precondition =
+          # absence of the marker; idempotent; transactional.
+          migrate_to_0_4_0() {
+            local umbrella="$1" module_name="$2"
+            local marker="$umbrella/$module_name/.mig040"
+            [ -f "$marker" ] && return 0
+            IS_MIGRATED=1
+            : > "$marker"
+            echo "  [migrate 0.4.0] applied"
+          }
+          EOF
+          git -C "$UP" init -q
+          git -C "$UP" add -A
+          git -C "$UP" -c user.email=ci@example.com -c user.name=ci commit -q -m up040
+
+          # pre-0.3.1 project walks the WHOLE chain 0.3.1 → 0.4.0 in order.
+          PROJ=$RUNNER_TEMP/chain
+          stage_legacy "$PROJ"
+          cd "$PROJ"
+          out=$(REPO_URL="file://$UP" bash intelligence/scripts/update.sh --yes)
+          echo "$out"
+          echo "$out" | grep -q 'IS_STATUS=migrated' || { echo "expected migrated"; exit 1; }
+          test -f intelligence/sync/.mig040                       # 0.4.0 ran
+          ! test -d intelligence/scripts                          # 0.3.1 ran
+          grep -q '^intelligence_sync_version: *"0.4.0"' intelligence/config.yaml
+          # Idempotent: re-run is a clean no-op at 0.4.0.
+          out2=$(REPO_URL="file://$UP" bash intelligence/sync/scripts/update.sh --yes)
+          echo "$out2" | grep -q 'IS_STATUS=ok' || { echo "expected ok on re-run"; exit 1; }
+          grep -q '^intelligence_sync_version: *"0.4.0"' intelligence/config.yaml
+
+      - name: Version-compat guard fails closed (ahead-of-engine)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJ=$RUNNER_TEMP/ahead
+          mkdir -p "$PROJ/intelligence"
+          cp -r intelligence/sync "$PROJ/intelligence/sync"
+          mkdir -p "$PROJ/intelligence/rules"
+          printf '# ctx\n' > "$PROJ/intelligence/rules/context.md"
+          # Schema stamped far ahead of the engine, in config.yaml.
+          cat > "$PROJ/intelligence/config.yaml" <<'EOF'
+          project:
+            name: ahead
+          intelligence_sync_version: "99.0.0"
+          sources:
+            rules:
+              - "intelligence/rules"
+          targets:
+            agents: { enabled: true, output: "AGENTS.md" }
+          EOF
+          git -C "$PROJ" init -q
+          git -C "$PROJ" add -A
+          git -C "$PROJ" -c user.email=ci@example.com -c user.name=ci commit -q -m init
+          cd "$PROJ"
+          set +e
+          out=$(bash intelligence/sync/scripts/sync.sh); rc=$?
+          set -e
+          echo "$out"; echo "rc=$rc"
+          [ "$rc" -eq 4 ] || { echo "expected exit 4 (ahead-of-engine), got $rc"; exit 1; }
+          echo "$out" | grep -q 'IS_STATUS=ahead-of-engine' || { echo "missing ahead-of-engine"; exit 1; }
+          ! test -f AGENTS.md
+
+      - name: Incomplete upstream fails closed (aborted-incomplete, legacy intact)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$STAGE_LIB"
+          BROKEN=$RUNNER_TEMP/broken-upstream
+          mkdir -p "$BROKEN"
+          tar --exclude='.git' -cf - . | (cd "$BROKEN" && tar -xf -)
+          rm -f "$BROKEN/intelligence/sync/scripts/lib/common.sh"
+          git -C "$BROKEN" init -q
+          git -C "$BROKEN" add -A
+          git -C "$BROKEN" -c user.email=ci@example.com -c user.name=ci commit -q -m broken
+
+          PROJ=$RUNNER_TEMP/legacy3
+          stage_legacy "$PROJ"
+          cd "$PROJ"
+          set +e
+          out=$(REPO_URL="file://$BROKEN" bash intelligence/scripts/update.sh --yes); rc=$?
+          set -e
+          echo "$out"
+          [ "$rc" -eq 5 ] || { echo "expected exit 5 (aborted-incomplete), got $rc"; exit 1; }
+          echo "$out" | grep -q 'IS_STATUS=aborted-incomplete' || { echo "missing aborted-incomplete"; exit 1; }
+          # Crash-safety: legacy fully intact, nothing migrated/stamped.
+          test -d intelligence/scripts
+          test -e intelligence/INIT.md
+          test -d intelligence/skills/intelligence-sync
+          test -f intelligence/skills/backend-add-endpoint/SKILL.md
+          ! grep -q '"intelligence/sync/skills"' intelligence/config.yaml
+          ! grep -q '^intelligence_sync_version:' intelligence/config.yaml
 
   guardrails:
     name: guardrails (refuse dangerous configs)
@@ -188,14 +374,13 @@ jobs:
           set -euo pipefail
           PROJ=$RUNNER_TEMP/badproj
           mkdir -p "$PROJ/intelligence"
-          cp -r intelligence/scripts intelligence/INIT.md "$PROJ/intelligence/"
+          cp -r intelligence/sync "$PROJ/intelligence/sync"
           mkdir -p "$PROJ/intelligence/rules"
-          cat > "$PROJ/intelligence/rules/context.md" <<'EOF'
-          # Always-on
-          EOF
+          printf '# Always-on\n' > "$PROJ/intelligence/rules/context.md"
           cat > "$PROJ/intelligence/config.yaml" <<'EOF'
           project:
             name: bad
+          intelligence_sync_version: "0.3.1"
           sources:
             rules:
               - "intelligence/rules"
@@ -214,11 +399,9 @@ jobs:
           git -C "$PROJ" init -q
           git -C "$PROJ" add -A
           git -C "$PROJ" -c user.email=ci@example.com -c user.name=ci commit -q -m init
-
           cd "$PROJ"
-          if bash intelligence/scripts/sync.sh; then
-            echo "FAIL: sync did not refuse dangerous output path."
-            exit 1
+          if bash intelligence/sync/scripts/sync.sh; then
+            echo "FAIL: sync did not refuse dangerous output path."; exit 1
           else
             echo "OK: sync refused dangerous output path."
           fi
@@ -229,13 +412,12 @@ jobs:
           set -euo pipefail
           PROJ=$RUNNER_TEMP/noagents
           mkdir -p "$PROJ/intelligence/rules"
-          cp -r intelligence/scripts intelligence/INIT.md "$PROJ/intelligence/"
-          cat > "$PROJ/intelligence/rules/context.md" <<'EOF'
-          # Always-on
-          EOF
+          cp -r intelligence/sync "$PROJ/intelligence/sync"
+          printf '# Always-on\n' > "$PROJ/intelligence/rules/context.md"
           cat > "$PROJ/intelligence/config.yaml" <<'EOF'
           project:
             name: noagents
+          intelligence_sync_version: "0.3.1"
           sources:
             rules:
               - "intelligence/rules"
@@ -250,11 +432,9 @@ jobs:
           git -C "$PROJ" init -q
           git -C "$PROJ" add -A
           git -C "$PROJ" -c user.email=ci@example.com -c user.name=ci commit -q -m init
-
           cd "$PROJ"
-          if bash intelligence/scripts/sync.sh; then
-            echo "FAIL: sync did not enforce agents-required invariant."
-            exit 1
+          if bash intelligence/sync/scripts/sync.sh; then
+            echo "FAIL: sync did not enforce agents-required invariant."; exit 1
           else
             echo "OK: sync enforced agents-required invariant."
           fi
