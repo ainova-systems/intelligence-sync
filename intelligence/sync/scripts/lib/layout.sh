@@ -13,7 +13,8 @@
 #
 # detect_layout sets these globals:
 #   LS_LAYOUT        legacy | modular | unknown
-#   LS_MODULE_DIR    dir that contains scripts/ (legacy: == umbrella; modular: <umbrella>/sync)
+#   LS_MODULE_DIR    dir that contains scripts/ (legacy: == umbrella; modular: <umbrella>/<module>)
+#   LS_MODULE_NAME   basename of LS_MODULE_DIR — messages only, never branched on
 #   LS_UMBRELLA_DIR  dir that holds (or will hold) config.yaml + project content
 #   LS_CONFIG_FILE   absolute path to config.yaml, or "" if none found yet
 
@@ -40,6 +41,7 @@ detect_layout() {
     fi
 
     LS_MODULE_DIR="$module_dir"
+    LS_MODULE_NAME="$(basename "$module_dir")"   # messages only
     if [ -f "$LS_UMBRELLA_DIR/config.yaml" ]; then
         LS_CONFIG_FILE="$LS_UMBRELLA_DIR/config.yaml"
     else

@@ -14,40 +14,45 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MODULE_NAME="sync"
 
 source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/layout.sh"
 source "$SCRIPT_DIR/lib/migrations.sh"
 
-# Umbrella is whatever folder holds config.yaml — name not hardcoded.
+# Umbrella = whatever folder holds config.yaml (name not hardcoded). The
+# module is wherever this script lives — sync.sh self-locates and does NOT
+# assume a folder name.
 detect_layout "$SCRIPT_DIR"
 INTELLIGENCE_DIR="$LS_UMBRELLA_DIR"
 
-# Legacy flat layout: stage the engine into the module subfolder and re-exec
-# from there. The destructive legacy cleanup then never deletes the directory
-# of the running process (some Windows shells lock open script files).
-if [ "$LS_LAYOUT" = "legacy" ] && [ -z "${INTELLIGENCE_SYNC_REEXEC:-}" ] \
-   && [ -d "$INTELLIGENCE_DIR/scripts" ]; then
-    _mig_copy_dir "$INTELLIGENCE_DIR/scripts" "$INTELLIGENCE_DIR/$MODULE_NAME/scripts"
-    if [ -s "$INTELLIGENCE_DIR/$MODULE_NAME/scripts/sync.sh" ]; then
-        export INTELLIGENCE_SYNC_REEXEC=1
-        exec bash "$INTELLIGENCE_DIR/$MODULE_NAME/scripts/sync.sh" "$@"
-    fi
+# sync.sh is a PURE synchronizer — it is not a migrator. Migration across a
+# breaking-change gap is owned solely by the intelligence-update flow
+# (update.sh + skill). sync refuses to run across an un-applied gap so a
+# stale/mismatched engine can never generate against a newer layout.
+if [ "$LS_LAYOUT" != "modular" ]; then
+    is_status needs-update "layout=$LS_LAYOUT"
+    echo "ERROR: engine is not in the modular layout (layout=$LS_LAYOUT)." >&2
+    echo "       Run the update flow: tell your agent \"Update intelligence-sync\"." >&2
+    exit "$IS_RC_NEEDS_UPDATE"
 fi
 
-# Apply pending migrations (offline: relocate local files). Idempotent —
-# a fully migrated or fresh project is a silent no-op. On a state bash will
-# not resolve (ahead-of-engine / incomplete), it emits IS_STATUS + a stable
-# code and we exit so the intelligence-update skill can take over.
-_mig_rc=0
-run_migrations "$INTELLIGENCE_DIR" "$MODULE_NAME" "" || _mig_rc=$?
-if [ "$_mig_rc" -ne 0 ]; then exit "$_mig_rc"; fi
+# Schema version lives in config.yaml (the frozen contract key).
+_cf="${CONFIG_FILE:-$INTELLIGENCE_DIR/config.yaml}"
 
-# After migration the engine lives in the module subfolder; re-point at it
-# (adapters are sourced lazily from SCRIPT_DIR further down).
-if [ -d "$INTELLIGENCE_DIR/$MODULE_NAME/scripts" ]; then
-    SCRIPT_DIR="$INTELLIGENCE_DIR/$MODULE_NAME/scripts"
+# Stale engine vs project schema stamped NEWER (ahead-of-engine) → refuse.
+_vc_rc=0
+check_version_compat "$_cf" || _vc_rc=$?
+if [ "$_vc_rc" -ne 0 ]; then exit "$_vc_rc"; fi
+
+# Project stamped OLDER than engine → pending breaking changes. Do not sync
+# across the gap; the update flow must apply the migration chain first.
+_stamp="$(read_engine_stamp "$_cf")"
+_eng="$(engine_version)"
+if [ -n "$_stamp" ] && [ -n "$_eng" ] && _ver_gt "$_eng" "$_stamp"; then
+    is_status needs-update "stamped=$_stamp engine=$_eng"
+    echo "ERROR: project at $_stamp but engine is $_eng — pending breaking changes." >&2
+    echo "       Run the update flow first: tell your agent \"Update intelligence-sync\"." >&2
+    exit "$IS_RC_NEEDS_UPDATE"
 fi
 
 # Normalize REPO_ROOT to the same `cd && pwd` style as INTELLIGENCE_DIR so
@@ -185,9 +190,6 @@ warn_unsynced "$REPO_ROOT" "$CONFIG_FILE"
 report_model_drift "$CONFIG_FILE"
 
 echo ""
-if [ "${IS_MIGRATED:-0}" -eq 1 ]; then
-    is_status migrated "synced=$synced"
-else
-    is_status ok "synced=$synced"
-fi
+# sync.sh never migrates (the update flow owns that), so success is always ok.
+is_status ok "synced=$synced"
 echo "=== Done: $synced target(s) synced ==="

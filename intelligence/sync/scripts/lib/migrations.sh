@@ -1,28 +1,75 @@
 #!/bin/bash
-# intelligence-sync: versioned migrations
+# intelligence-sync: versioned migrations — breaking-change update architecture
 # Source this file — never execute directly. Requires layout.sh already
 # sourced (uses no globals from it directly; callers pass paths explicitly).
 #
-# Every migrate_to_<ver> is self-guarding and idempotent: it checks its own
-# precondition and is a silent no-op when already applied, so the whole
-# registry can be replayed any number of times without failing or producing
-# duplicates. The dispatcher runs them in version order, so a project that
-# fell several versions behind is brought forward step by step.
+# THE MODEL (how breaking changes are shipped & absorbed):
+#   * The project carries a version stamp (.intelligence-sync-version); the
+#     engine carries scripts/VERSION. The gap stamped → engine IS the set of
+#     breaking changes to apply.
+#   * Each breaking structural change ships as ONE registered migrate_to_<ver>
+#     in MIGRATIONS (ordered, ascending). The dispatcher applies only the
+#     pending ones (target version > stamped), in order, so a project several
+#     versions behind is walked forward step by step, stamping after each.
+#   * Every migrate_to_<ver> obeys the contract: precondition → stage → verify
+#     postcondition (sentinel) → commit → cleanup; idempotent; fail-closed
+#     (never destroy prior state before the replacement is verified).
+#   * A stale engine refuses a project stamped newer than it knows
+#     (ahead-of-engine). sync.sh refuses to sync across an un-applied gap
+#     (needs-update). The intelligence-update SKILL is the brain: it reads the
+#     CHANGELOG across the gap, surfaces breaking items, runs this chain, and
+#     verifies after.
 #
 # Naming carries the target version (bash forbids dots → underscores):
 #   migrate_to_0_3_1   flat <umbrella>/scripts → modular <umbrella>/sync/
-# Future migrations are added to MIGRATIONS and as new migrate_to_* functions;
-# nothing here is rewritten.
+# Future breaking changes: append a new suffix to MIGRATIONS and add the
+# matching migrate_to_<ver> — nothing here is rewritten or reordered.
 
-# Ordered list of migration suffixes. Append new ones; never reorder.
+# Ordered (ascending) list of migration target versions. Append only.
 MIGRATIONS=( "0_3_1" )
 
-_mig_stamp_file() { printf '%s/.intelligence-sync-version' "$1"; }
+# The applied-schema version is a managed key in config.yaml — NOT a dotfile,
+# NOT scripts/VERSION. config.yaml is what most future breaking changes will
+# reshape, so the schema version lives with what it versions.
+#
+# INVARIANT: this key is a PERMANENT, format-stable, top-level scalar contract.
+# Migrations may restructure anything else in config.yaml, but never the name,
+# location, or shape of this key — so any engine (however old/new) can always
+# read "what schema is this?" before parsing the rest. The bootstrap/INIT flow
+# must emit it for fresh projects and preserve it on re-bootstrap.
+IS_VERSION_KEY="intelligence_sync_version"
 
-# stamp_version <module_dir> <version>
+# "0_3_1" → "0.3.1"
+_mig_ver_dotted() { printf '%s' "$1" | tr '_' '.'; }
+
+# read_engine_stamp <config_file> → applied version, or "" if absent.
+read_engine_stamp() {
+    local cf="$1"
+    [ -f "$cf" ] || return 0
+    awk -v k="$IS_VERSION_KEY" '
+        { sub(/\r$/, "") }
+        $0 ~ "^" k ":" {
+            v = $0; sub(/^[^:]*:[[:space:]]*/, "", v)
+            gsub(/^["\047]|["\047][[:space:]]*$/, "", v)
+            sub(/[[:space:]]+$/, "", v)
+            print v; exit
+        }
+    ' "$cf"
+}
+
+# stamp_version <config_file> <version> — idempotent, transactional upsert of
+# the contract key (replace in place if present, else append at top level).
+# No-op if config.yaml does not exist yet (pre-bootstrap).
 stamp_version() {
-    [ -d "$1" ] || return 0
-    printf '%s\n' "$2" > "$(_mig_stamp_file "$1")"
+    local cf="$1" ver="$2"
+    [ -f "$cf" ] || return 0
+    local tmp="$cf.ver.tmp"
+    awk -v k="$IS_VERSION_KEY" -v val="$ver" '
+        { sub(/\r$/, "") }
+        $0 ~ "^" k ":" { print k ": \"" val "\""; found=1; next }
+        { print }
+        END { if (!found) print k ": \"" val "\"" }
+    ' "$cf" > "$tmp" && mv "$tmp" "$cf"
 }
 
 # --- bash ↔ skill status contract -------------------------------------------
@@ -37,6 +84,7 @@ IS_RC_CONFIG_MISSING=2      # no config.yaml found
 IS_RC_AMBIGUOUS=3           # conflicting state; skill/human-only — bash never emits this itself, it is reserved for the intelligence-update skill to report
 IS_RC_AHEAD=4               # project stamped newer than this engine understands
 IS_RC_ABORTED_INCOMPLETE=5  # staged module incomplete; legacy left intact
+IS_RC_NEEDS_UPDATE=6        # pending breaking changes (stamp < engine) — run the update flow first
 
 # is_status <code-name> [detail] — emit one parseable line for the skill.
 is_status() {
@@ -74,14 +122,13 @@ _ver_gt() {
     return 1
 }
 
-# check_version_compat <module_dir> — refuse to operate on a project whose
-# stamp is newer than this engine knows (a stale engine must never rewrite a
-# newer layout). Emits status + returns IS_RC_AHEAD on conflict, else 0.
+# check_version_compat <config_file> — refuse to operate on a project whose
+# config schema is stamped newer than this engine knows (a stale engine must
+# never rewrite/sync a newer schema). Emits status + returns IS_RC_AHEAD on
+# conflict, else 0.
 check_version_compat() {
-    local module_dir="$1" stamp eng
-    local sf; sf="$(_mig_stamp_file "$module_dir")"
-    [ -f "$sf" ] || return 0
-    stamp="$(tr -d ' \t\r\n' < "$sf")"
+    local cf="$1" stamp eng
+    stamp="$(read_engine_stamp "$cf")"
     [ -n "$stamp" ] || return 0
     eng="$(engine_version)"
     [ -n "$eng" ] || return 0
@@ -180,9 +227,9 @@ migrate_to_0_3_1() {
     for s in "$umbrella"/skills/intelligence-*; do
         [ -e "$s" ] && { has_legacy=1; break; }
     done
+    # Already modular / fresh ⇒ nothing to relocate. Stamping is owned by the
+    # dispatcher (run_migrations), not here.
     if [ "$has_legacy" -eq 0 ]; then
-        [ -d "$module_dir" ] && [ ! -f "$(_mig_stamp_file "$module_dir")" ] \
-            && stamp_version "$module_dir" "0.3.1"
         return 0
     fi
 
@@ -243,27 +290,41 @@ migrate_to_0_3_1() {
     # config.yaml: name-agnostic relative path under the actual umbrella base.
     _mig_add_skill_source "$umbrella/config.yaml" "$(basename "$umbrella")/$module_name/skills"
 
-    stamp_version "$module_dir" "0.3.1"
     echo "  [migrate 0.3.1] done — engine at '$module_name/', legacy removed, no duplicates"
 }
 
 # run_migrations <umbrella_dir> <module_name> [<upstream_module_dir>]
-# Returns 0 on success (IS_MIGRATED indicates whether work happened), or the
-# first migration's IS_RC_* code on failure. Never partially destroys: each
-# migrate_to_* is transactional and fail-closed. The caller maps the code to
-# an exit status + IS_STATUS line for the skill.
+# The dispatcher of the breaking-change chain. Correctness rests on idempotent
+# structural preconditions, NOT on the stamp: every migrate_to_* self-detects
+# whether its change is already applied and is a silent no-op if so, so the
+# whole chain is simply run in order — a wrong/missing stamp can never cause a
+# needed migration to be skipped. The stamp is only a safety guard
+# (ahead-of-engine / needs-update) + reporting. Returns 0 on success
+# (IS_MIGRATED tells whether work happened) or the failing migration's IS_RC_*
+# code; never partially destroys (each migrate_to_* is transactional and
+# fail-closed). Caller maps the code to an exit status + IS_STATUS line.
 run_migrations() {
     local umbrella="$1" module_name="$2" upstream="${3:-}"
-    local v rc
-    # Version-compat guard first: a stale engine must not touch a newer layout.
-    check_version_compat "$umbrella/$module_name" || return $?
+    local cf="$umbrella/config.yaml"
+    local v ver rc
+    # A stale engine must never touch a project schema stamped newer than it
+    # knows. (Reads the frozen contract key from config.yaml.)
+    check_version_compat "$cf" || return $?
     for v in "${MIGRATIONS[@]}"; do
+        ver="$(_mig_ver_dotted "$v")"
         "migrate_to_$v" "$umbrella" "$module_name" "$upstream"
         rc=$?
-        # Explicit if (not `[ ] && return`): the terse form's trailing false
-        # test would be the loop body's last status, making correctness hinge
-        # on a subtle `set -e` &&-list exemption + the post-loop `return 0`.
         if [ "$rc" -ne 0 ]; then return "$rc"; fi
+        # Commit progress: stamp this version so an interrupted chain resumes
+        # from the last good point. Idempotent migrations that no-op'd just
+        # re-assert the same value.
+        stamp_version "$cf" "$ver"
     done
+    # Fresh project with no stamp at all (e.g. just-bootstrapped, nothing in
+    # the chain applied) → stamp to the engine version so future runs have a
+    # baseline. Safe: migrations already self-skipped.
+    if [ -z "$(read_engine_stamp "$cf")" ]; then
+        stamp_version "$cf" "$(engine_version)"
+    fi
     return 0
 }

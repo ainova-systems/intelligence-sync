@@ -25,7 +25,6 @@ set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/ainova-systems/intelligence-sync.git}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MODULE_NAME="sync"
 AUTO_YES=0
 [ "${1:-}" = "--yes" ] && AUTO_YES=1
 
@@ -34,7 +33,22 @@ source "$SCRIPT_DIR/lib/migrations.sh"
 
 detect_layout "$SCRIPT_DIR"
 UMBRELLA="$LS_UMBRELLA_DIR"
-MODULE_DIR="$UMBRELLA/$MODULE_NAME"
+CONFIG_FILE_PATH="$UMBRELLA/config.yaml"
+
+# Local module dir = wherever this engine lives (self-located, any name) when
+# already modular; for a pre-0.3.1 flat project the module does not exist yet,
+# so it is created under the conventional name `sync`. MODULE_NAME is only the
+# creation convention — not a rename feature, not used to find the upstream.
+if [ "$LS_LAYOUT" = "modular" ]; then
+    MODULE_DIR="$LS_MODULE_DIR"
+    MODULE_NAME="$LS_MODULE_NAME"
+else
+    MODULE_NAME="sync"
+    MODULE_DIR="$UMBRELLA/$MODULE_NAME"
+fi
+# The upstream repo's module is always `sync/` by convention, independent of
+# whatever the local module is named.
+UPSTREAM_MODULE="sync"
 
 WORK_DIR=$(mktemp -d -t intelligence-sync-update-XXXXXX 2>/dev/null || mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT INT TERM
@@ -60,8 +74,8 @@ git clone --depth=1 --quiet "$REPO_URL" "$WORK_DIR"
 #   legacy : $WORK_DIR/intelligence/{scripts,INIT.md,skills} + $WORK_DIR/docs
 UPMOD="$WORK_DIR/_module"
 mkdir -p "$UPMOD/skills"
-if [ -d "$WORK_DIR/intelligence/$MODULE_NAME/scripts" ]; then
-    _SRC="$WORK_DIR/intelligence/$MODULE_NAME"
+if [ -d "$WORK_DIR/intelligence/$UPSTREAM_MODULE/scripts" ]; then
+    _SRC="$WORK_DIR/intelligence/$UPSTREAM_MODULE"
     cp -r "$_SRC/scripts" "$UPMOD/scripts"
     [ -f "$_SRC/INIT.md" ] && cp "$_SRC/INIT.md" "$UPMOD/INIT.md"
     [ -d "$_SRC/docs" ] && cp -r "$_SRC/docs" "$UPMOD/docs"
@@ -77,7 +91,7 @@ elif [ -d "$WORK_DIR/intelligence/scripts" ]; then
     done
 else
     is_status error "upstream-layout-unrecognized"
-    echo "ERROR: upstream layout unrecognized — no intelligence/$MODULE_NAME/scripts/ or intelligence/scripts/."
+    echo "ERROR: upstream layout unrecognized — no intelligence/$UPSTREAM_MODULE/scripts/ or intelligence/scripts/."
     exit "$IS_RC_ERROR"
 fi
 
@@ -122,8 +136,19 @@ if [ $AUTO_YES -ne 1 ]; then
     esac
 fi
 
-# Migrate legacy → modular if needed (authoritative content from upstream).
-# Idempotent: a no-op on already-modular projects. Fail-closed: on a state
+# CRITICAL: run the DESTINATION engine's migration chain, not the stale local
+# one. A breaking migration shipped in the new version is defined only in the
+# upstream migrations.sh; re-source it so MIGRATIONS / migrate_to_* /
+# run_migrations / engine_version all reflect the version we are applying.
+# Otherwise a new breaking change would be silently skipped while the version
+# still advances — the exact corruption this architecture exists to prevent.
+if [ -f "$UPMOD/scripts/lib/migrations.sh" ]; then
+    # shellcheck source=/dev/null
+    source "$UPMOD/scripts/lib/migrations.sh"
+fi
+
+# Migrate via the upstream chain (authoritative content from UPMOD).
+# Idempotent: a no-op on already-current projects. Fail-closed: on a state
 # bash will not resolve it emits IS_STATUS + a stable code and we stop so the
 # intelligence-update skill can take over (never partially destroys).
 _mig_rc=0
@@ -163,10 +188,11 @@ for local_skill in "$MODULE_DIR"/skills/intelligence-*; do
     [ -d "$UPMOD/skills/$name" ] || { echo "  Removing meta-skill no longer upstream: $name"; rm -rf "$local_skill"; }
 done
 
-# Stamp the applied version (from upstream VERSION if present, else 0.3.1).
+# Stamp the applied schema version into config.yaml (the frozen contract
+# key). Covers the already-modular in-place path where no migration ran.
 _ver="0.3.1"
 [ -f "$UPMOD/scripts/VERSION" ] && _ver="$(tr -d ' \r\n' < "$UPMOD/scripts/VERSION")"
-stamp_version "$MODULE_DIR" "$_ver"
+stamp_version "$CONFIG_FILE_PATH" "$_ver"
 
 find "$MODULE_DIR/scripts" -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 

@@ -4,32 +4,38 @@ All notable changes to intelligence-sync are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> **Breaking-change convention:** any release that changes a structure the engine migrates (layout, `config.yaml` schema, …) carries a **`### Breaking`** subsection. Each item states its post-condition so the `intelligence-update` skill can verify it after applying. This marker is part of the update contract — do not omit it for breaking releases.
+
 ## [0.3.1] — 2026-05-19
+
+### Breaking
+
+- **Modular layout.** The engine, meta-skills, `INIT.md`, and vendored docs move from flat under the umbrella into one self-contained module subfolder `<umbrella>/sync/`. *Post-condition:* no `intelligence-*` directory remains directly under `<umbrella>/skills/`; `<umbrella>/scripts`, `<umbrella>/INIT.md`, `<umbrella>/docs` are gone; `<umbrella>/sync/scripts/sync.sh` exists.
+- **Schema-version key.** `config.yaml` gains a managed top-level scalar `intelligence_sync_version` — a permanent, format-stable contract key (never renamed/moved by any future migration). *Post-condition:* `config.yaml` contains `intelligence_sync_version` equal to the engine `scripts/VERSION`, exactly once, plus an additive `sources.skills` entry for the module skills path.
 
 ### Changed
 
-- **Modular layout (no duplication).** The engine, meta-skills, `INIT.md`, and vendored docs now live in one self-contained module subfolder `<umbrella>/sync/` instead of flat under the umbrella mixed with project content. Project content (`rules/`, `agents/`, non-meta `skills/`, `config.yaml`) stays at the umbrella level. This makes room for additional independently-updatable modules (e.g. `domain/`) beside `sync/`. The umbrella folder name is never hardcoded — it is whatever holds `config.yaml`.
-- `sync.sh` / `update.sh` — path detection split into `lib/layout.sh` (`detect_layout`, name-agnostic); migrations into `lib/migrations.sh` (versioned ordered registry + dispatcher). `sync.sh` re-execs from the module after staging so destructive cleanup never deletes the running process's directory.
+- Project content (`rules/`, `agents/`, non-meta `skills/`) and `config.yaml` stay at the umbrella level. Additional independently-updatable modules (e.g. `domain/`) can sit beside `sync/`. The umbrella folder name is never hardcoded — it is whatever holds `config.yaml`; the engine self-locates by its own path.
+- `sync.sh` is now a **pure synchronizer** — it never migrates. It fails closed (`needs-update`, exit 6) when the project is non-modular or its schema is older than the engine, deferring all migration to the update flow. `update.sh` is the sole migrator.
 
 ### Added
 
-- **Secure, idempotent migration** `migrate_to_0_3_1` (pre-0.3.1 flat → `<umbrella>/sync/`): copy → verify sentinel → only then delete legacy; meta-skills are **moved, never duplicated**; one idempotent additive line is added to `config.yaml` `sources.skills`; replaying never fails or duplicates. Version-named so future migrations chain in order.
-- **bash ↔ skill status contract.** The engine is deterministic and fail-closed: any state it cannot resolve safely emits a machine-readable `IS_STATUS=<code>` line + a stable exit code (`ok`/`migrated`/`ambiguous`/`ahead-of-engine`/`aborted-incomplete`/`config-missing`) and stops without guessing. The `intelligence-update` skill is the intelligent layer that interprets the code and resolves it.
-- **Version-compat guard**: a stale engine refuses to operate on a project stamped newer than it understands (`ahead-of-engine`) — prevents corruption with multiple modules/versions.
-- `<umbrella>/sync/.intelligence-sync-version` stamp + `scripts/VERSION` source of truth; generalized migration contract documented in `docs/CONVENTIONS.md`.
+- **Versioned breaking-change architecture.** `lib/migrations.sh` holds an ordered registry (`MIGRATIONS=()`) + dispatcher; each breaking change ships as one `migrate_to_<ver>`. Correctness rests on **idempotent structural preconditions** (each migration self-detects and no-ops if already applied) — a wrong/missing version stamp can never skip a needed migration. The chain is transactional and fail-closed: stage → verify sentinel → commit → only then delete prior state.
+- **bash ↔ skill status contract.** Any unresolvable state emits `IS_STATUS=<code>` + a stable exit code: `ok`/`migrated` (0), `error` (1), `config-missing` (2), `ambiguous` (3), `ahead-of-engine` (4), `aborted-incomplete` (5), `needs-update` (6). The `intelligence-update` skill is the intelligent layer: it discovers the engine by role, reads this CHANGELOG across the version gap (surfacing `### Breaking` items), runs the chain, branches on the code, and verifies each breaking post-condition afterward.
+- **Version-compat guard** (`ahead-of-engine`): a stale engine refuses to operate on a project whose `intelligence_sync_version` is newer than it understands.
 
 ### Migrating a pre-0.3.1 project
 
-There is **no manual procedure and no deadline**. A pre-0.3.1 project's frozen `update.sh` now fails **closed** (exits non-zero, changes nothing — no data loss, ever, no matter how long it sits). To migrate, tell your AI coding agent:
+There is **no manual procedure and no deadline**. A pre-0.3.1 project's frozen `update.sh` fails **closed** (exits non-zero, changes nothing — no data loss, ever, however long it sits). To migrate, tell your AI coding agent:
 
 > **Update intelligence-sync**
 
-The `intelligence-update` skill detects the project state, fetches the current engine, drives the migration, resolves issues, and verifies the result. Migration is idempotent and safe to repeat.
+The `intelligence-update` skill discovers the engine, reads the changelog, drives the migration chain, resolves issues, and verifies the breaking post-conditions. Idempotent and safe to repeat.
 
 ### Compatibility
 
-- The upstream repo is **pure modular** — no flat bridge, no duplicated trees. Old clients fail closed (safe) until migrated; there is no calendar cutover to break un-migrated projects.
-- Reserved prefix: project skills must not use the `intelligence-` prefix (it marks upstream-owned meta-skills).
+- Upstream is **pure modular** — no flat bridge, no duplicated trees. Old clients fail closed (safe) until migrated; no calendar cutover.
+- Reserved prefix: project skills must not use the `intelligence-` prefix.
 
 ## [0.2.1] — 2026-05-14
 

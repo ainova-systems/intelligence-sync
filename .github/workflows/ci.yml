@@ -208,7 +208,7 @@ jobs:
           STAGE
           echo "STAGE_LIB=$RUNNER_TEMP/stage.sh" >> "$GITHUB_ENV"
 
-      - name: Offline migration via sync.sh + idempotent re-run
+      - name: sync.sh on legacy fails closed with needs-update (never migrates)
         shell: bash
         run: |
           set -euo pipefail
@@ -216,33 +216,19 @@ jobs:
           PROJ=$RUNNER_TEMP/legacy1
           stage_legacy "$PROJ"
           cd "$PROJ"
-
-          out=$(bash intelligence/scripts/sync.sh)
+          set +e
+          out=$(bash intelligence/scripts/sync.sh); rc=$?
+          set -e
           echo "$out"
-          echo "$out" | grep -q 'IS_STATUS=migrated' || { echo "expected IS_STATUS=migrated"; exit 1; }
+          [ "$rc" -eq 6 ] || { echo "expected exit 6 (needs-update), got $rc"; exit 1; }
+          echo "$out" | grep -q 'IS_STATUS=needs-update' || { echo "missing needs-update"; exit 1; }
+          # sync.sh must NOT migrate or generate anything.
+          test -d intelligence/scripts
+          test -d intelligence/skills/intelligence-sync
+          ! test -d intelligence/sync
+          ! test -f AGENTS.md
 
-          # Relocation + no duplication
-          test -f intelligence/sync/scripts/sync.sh
-          test -f intelligence/sync/INIT.md
-          test -d intelligence/sync/skills/intelligence-sync
-          grep -qx '0.3.1' intelligence/sync/.intelligence-sync-version
-          ! test -d intelligence/scripts
-          ! test -e intelligence/INIT.md
-          [ -z "$(find intelligence/skills -maxdepth 1 -name 'intelligence-*')" ]
-          # Project content intact
-          test -f intelligence/skills/backend-add-endpoint/SKILL.md
-          test -f intelligence/rules/context.md
-          test "$(grep -c '"intelligence/sync/skills"' intelligence/config.yaml)" -eq 1
-          test -f AGENTS.md
-
-          # Idempotent re-run: no failure, no duplication, status ok.
-          out2=$(bash intelligence/sync/scripts/sync.sh)
-          echo "$out2" | grep -q 'IS_STATUS=ok' || { echo "expected IS_STATUS=ok on re-run"; exit 1; }
-          ! test -d intelligence/scripts
-          [ -z "$(find intelligence/skills -maxdepth 1 -name 'intelligence-*')" ]
-          test "$(grep -c '"intelligence/sync/skills"' intelligence/config.yaml)" -eq 1
-
-      - name: update.sh migration from local upstream + idempotent re-run
+      - name: update.sh migrates (config-key stamp) + idempotent re-run
         shell: bash
         run: |
           set -euo pipefail
@@ -255,29 +241,86 @@ jobs:
           echo "$out"
           echo "$out" | grep -q 'IS_STATUS=migrated' || { echo "expected IS_STATUS=migrated"; exit 1; }
           test -f intelligence/sync/scripts/sync.sh
-          grep -qx '0.3.1' intelligence/sync/.intelligence-sync-version
+          # Schema version is a config.yaml key (not a dotfile).
+          ! test -e intelligence/sync/.intelligence-sync-version
+          grep -Eq '^intelligence_sync_version: *"[0-9]' intelligence/config.yaml
+          test "$(grep -c '^intelligence_sync_version:' intelligence/config.yaml)" -eq 1
+          ! test -d intelligence/scripts
           [ -z "$(find intelligence/skills -maxdepth 1 -name 'intelligence-*')" ]
           test -f intelligence/skills/backend-add-endpoint/SKILL.md
           test "$(grep -c '"intelligence/sync/skills"' intelligence/config.yaml)" -eq 1
 
           out2=$(REPO_URL="file://$GITHUB_WORKSPACE" bash intelligence/sync/scripts/update.sh --yes)
           echo "$out2" | grep -q 'IS_STATUS=ok' || { echo "expected IS_STATUS=ok on re-run"; exit 1; }
-          bash intelligence/sync/scripts/sync.sh >/dev/null
+          test "$(grep -c '^intelligence_sync_version:' intelligence/config.yaml)" -eq 1
+          # Now modular & current → sync.sh works and is ok.
+          s=$(bash intelligence/sync/scripts/sync.sh); echo "$s" | grep -q 'IS_STATUS=ok'
           test -f AGENTS.md
+
+      - name: Multi-version chain walks forward (0.3.1 → 0.4.0), idempotent
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$STAGE_LIB"
+          # An upstream with a synthetic SECOND breaking migration appended.
+          UP=$RUNNER_TEMP/up040
+          mkdir -p "$UP"
+          tar --exclude='.git' -cf - . | (cd "$UP" && tar -xf -)
+          M="$UP/intelligence/sync/scripts/lib/migrations.sh"
+          printf '0.4.0\n' > "$UP/intelligence/sync/scripts/VERSION"
+          sed -i 's/^MIGRATIONS=( "0_3_1" )/MIGRATIONS=( "0_3_1" "0_4_0" )/' "$M"
+          cat >> "$M" <<'EOF'
+
+          # synthetic breaking migration for CI: structural precondition =
+          # absence of the marker; idempotent; transactional.
+          migrate_to_0_4_0() {
+            local umbrella="$1" module_name="$2"
+            local marker="$umbrella/$module_name/.mig040"
+            [ -f "$marker" ] && return 0
+            IS_MIGRATED=1
+            : > "$marker"
+            echo "  [migrate 0.4.0] applied"
+          }
+          EOF
+          git -C "$UP" init -q
+          git -C "$UP" add -A
+          git -C "$UP" -c user.email=ci@example.com -c user.name=ci commit -q -m up040
+
+          # pre-0.3.1 project walks the WHOLE chain 0.3.1 → 0.4.0 in order.
+          PROJ=$RUNNER_TEMP/chain
+          stage_legacy "$PROJ"
+          cd "$PROJ"
+          out=$(REPO_URL="file://$UP" bash intelligence/scripts/update.sh --yes)
+          echo "$out"
+          echo "$out" | grep -q 'IS_STATUS=migrated' || { echo "expected migrated"; exit 1; }
+          test -f intelligence/sync/.mig040                       # 0.4.0 ran
+          ! test -d intelligence/scripts                          # 0.3.1 ran
+          grep -q '^intelligence_sync_version: *"0.4.0"' intelligence/config.yaml
+          # Idempotent: re-run is a clean no-op at 0.4.0.
+          out2=$(REPO_URL="file://$UP" bash intelligence/sync/scripts/update.sh --yes)
+          echo "$out2" | grep -q 'IS_STATUS=ok' || { echo "expected ok on re-run"; exit 1; }
+          grep -q '^intelligence_sync_version: *"0.4.0"' intelligence/config.yaml
 
       - name: Version-compat guard fails closed (ahead-of-engine)
         shell: bash
         run: |
           set -euo pipefail
-          source "$STAGE_LIB"
           PROJ=$RUNNER_TEMP/ahead
           mkdir -p "$PROJ/intelligence"
           cp -r intelligence/sync "$PROJ/intelligence/sync"
-          cp examples/go-api/config.yaml "$PROJ/intelligence/config.yaml"
           mkdir -p "$PROJ/intelligence/rules"
           printf '# ctx\n' > "$PROJ/intelligence/rules/context.md"
-          # Stamp a version far ahead of the engine.
-          printf '99.0.0\n' > "$PROJ/intelligence/sync/.intelligence-sync-version"
+          # Schema stamped far ahead of the engine, in config.yaml.
+          cat > "$PROJ/intelligence/config.yaml" <<'EOF'
+          project:
+            name: ahead
+          intelligence_sync_version: "99.0.0"
+          sources:
+            rules:
+              - "intelligence/rules"
+          targets:
+            agents: { enabled: true, output: "AGENTS.md" }
+          EOF
           git -C "$PROJ" init -q
           git -C "$PROJ" add -A
           git -C "$PROJ" -c user.email=ci@example.com -c user.name=ci commit -q -m init
@@ -285,20 +328,16 @@ jobs:
           set +e
           out=$(bash intelligence/sync/scripts/sync.sh); rc=$?
           set -e
-          echo "$out"
-          echo "rc=$rc"
+          echo "$out"; echo "rc=$rc"
           [ "$rc" -eq 4 ] || { echo "expected exit 4 (ahead-of-engine), got $rc"; exit 1; }
-          echo "$out" | grep -q 'IS_STATUS=ahead-of-engine' || { echo "missing ahead-of-engine status"; exit 1; }
-          ! test -f AGENTS.md   # refused → nothing generated
+          echo "$out" | grep -q 'IS_STATUS=ahead-of-engine' || { echo "missing ahead-of-engine"; exit 1; }
+          ! test -f AGENTS.md
 
       - name: Incomplete upstream fails closed (aborted-incomplete, legacy intact)
         shell: bash
         run: |
           set -euo pipefail
           source "$STAGE_LIB"
-          # Broken upstream: a clone of this repo with the engine's common.sh
-          # removed → migrate_to_0_3_1's sentinel must refuse before deleting
-          # anything.
           BROKEN=$RUNNER_TEMP/broken-upstream
           mkdir -p "$BROKEN"
           tar --exclude='.git' -cf - . | (cd "$BROKEN" && tar -xf -)
@@ -315,14 +354,14 @@ jobs:
           set -e
           echo "$out"
           [ "$rc" -eq 5 ] || { echo "expected exit 5 (aborted-incomplete), got $rc"; exit 1; }
-          echo "$out" | grep -q 'IS_STATUS=aborted-incomplete' || { echo "missing aborted-incomplete status"; exit 1; }
-          # Crash-safety: legacy left fully intact, nothing migrated/edited.
+          echo "$out" | grep -q 'IS_STATUS=aborted-incomplete' || { echo "missing aborted-incomplete"; exit 1; }
+          # Crash-safety: legacy fully intact, nothing migrated/stamped.
           test -d intelligence/scripts
           test -e intelligence/INIT.md
           test -d intelligence/skills/intelligence-sync
           test -f intelligence/skills/backend-add-endpoint/SKILL.md
           ! grep -q '"intelligence/sync/skills"' intelligence/config.yaml
-          ! test -f intelligence/sync/.intelligence-sync-version
+          ! grep -q '^intelligence_sync_version:' intelligence/config.yaml
 
   guardrails:
     name: guardrails (refuse dangerous configs)
