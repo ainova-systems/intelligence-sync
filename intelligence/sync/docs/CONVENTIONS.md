@@ -40,7 +40,7 @@ intelligence/                         # Umbrella — name NOT hardcoded (whateve
     └── .intelligence-sync-version    # applied migration version stamp
 ```
 
-Everything project-authored lives at the umbrella level (`rules/ agents/ skills/`); everything upstream-owned lives in the self-contained module `sync/`, updated independently via `sync/scripts/update.sh`. Additional modules (e.g. `brain/`) sit beside `sync/`. The umbrella folder name is derived at runtime as "the directory holding `config.yaml`" — never hardcoded. The `intelligence-` skill prefix is **reserved** for upstream meta-skills; project skills must not use it (the updater moves/prunes anything matching that prefix).
+Everything project-authored lives at the umbrella level (`rules/ agents/ skills/`); everything upstream-owned lives in the self-contained module `sync/`, updated independently via `sync/scripts/update.sh`. Additional modules (e.g. `domain/`) sit beside `sync/`. The umbrella folder name is derived at runtime as "the directory holding `config.yaml`" — never hardcoded. The `intelligence-` skill prefix is **reserved** for upstream meta-skills; project skills must not use it (the updater moves/prunes anything matching that prefix).
 
 Rule filenames, agent names, and skill names all share the same **domain prefix** (`backend-`, `frontend-`, `devops-`, `core-`, `tests-`, project codename, or monorepo component name). Pick the domain once from repo structure and reuse it — do not invent new domains without clear need.
 
@@ -272,7 +272,7 @@ Structural changes to the module layout are handled by **versioned migrations**,
 
 Bash emits `IS_STATUS=<code> [IS_DETAIL=...]` on stdout and exits with the matching code; callers capture it with `cmd || rc=$?` (never `if ! cmd; then exit $?` — that loses the code). The skill branches on the code.
 
-**Module model.** Each `<umbrella>/<module>/` (`sync/`, future `brain/`, …) is self-contained: its own `scripts/`, `skills/`, `INIT.md`, `docs/`, and `.intelligence-sync-version` stamp. Modules are updated independently and never touch sibling modules or project content (`rules/`, `agents/`, non-meta `skills/`, `config.yaml` — except the one idempotent additive `sources.skills` line a migration may add).
+**Module model.** Each `<umbrella>/<module>/` (`sync/`, future `domain/`, …) is self-contained: its own `scripts/`, `skills/`, `INIT.md`, `docs/`, and `.intelligence-sync-version` stamp. Modules are updated independently and never touch sibling modules or project content (`rules/`, `agents/`, non-meta `skills/`, `config.yaml` — except the one idempotent additive `sources.skills` line a migration may add).
 
 ## .gitignore Pattern
 

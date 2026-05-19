@@ -1,14 +1,15 @@
 #!/bin/bash
 # intelligence-sync: Unified sync entry point
-# Reads config.yaml from the intelligence folder and syncs to all enabled targets.
+# Reads config.yaml from the umbrella folder and syncs to all enabled targets.
 #
 # Usage:
-#   bash intelligence/scripts/sync.sh              # Sync all enabled targets
-#   bash intelligence/scripts/sync.sh claude       # Sync only Claude
-#   bash intelligence/scripts/sync.sh cursor       # Sync only Cursor
+#   bash <umbrella>/sync/scripts/sync.sh           # Sync all enabled targets
+#   bash <umbrella>/sync/scripts/sync.sh claude    # Sync only Claude
+#   bash <umbrella>/sync/scripts/sync.sh cursor    # Sync only Cursor
 #
-# Config: config.yaml in parent of scripts/ (the intelligence folder).
-# REPO_ROOT: auto-detected from git, or override with env var.
+# Layout-agnostic: detect_layout finds the umbrella (the dir holding
+# config.yaml; name not hardcoded) and migrates a pre-0.3.1 flat layout into
+# the <umbrella>/sync/ module. REPO_ROOT: auto-detected from git, or via env.
 
 set -euo pipefail
 

@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- **Modular layout (no duplication).** The engine, meta-skills, `INIT.md`, and vendored docs now live in one self-contained module subfolder `<umbrella>/sync/` instead of flat under the umbrella mixed with project content. Project content (`rules/`, `agents/`, non-meta `skills/`, `config.yaml`) stays at the umbrella level. This makes room for additional independently-updatable modules (e.g. `brain/`) beside `sync/`. The umbrella folder name is never hardcoded — it is whatever holds `config.yaml`.
+- **Modular layout (no duplication).** The engine, meta-skills, `INIT.md`, and vendored docs now live in one self-contained module subfolder `<umbrella>/sync/` instead of flat under the umbrella mixed with project content. Project content (`rules/`, `agents/`, non-meta `skills/`, `config.yaml`) stays at the umbrella level. This makes room for additional independently-updatable modules (e.g. `domain/`) beside `sync/`. The umbrella folder name is never hardcoded — it is whatever holds `config.yaml`.
 - `sync.sh` / `update.sh` — path detection split into `lib/layout.sh` (`detect_layout`, name-agnostic); migrations into `lib/migrations.sh` (versioned ordered registry + dispatcher). `sync.sh` re-execs from the module after staging so destructive cleanup never deletes the running process's directory.
 
 ### Added

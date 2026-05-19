@@ -34,7 +34,7 @@ stamp_version() {
 IS_RC_OK=0                  # success (synced / migrated / nothing to do)
 IS_RC_ERROR=1               # generic error
 IS_RC_CONFIG_MISSING=2      # no config.yaml found
-IS_RC_AMBIGUOUS=3           # conflicting state; only the skill/human can resolve
+IS_RC_AMBIGUOUS=3           # conflicting state; skill/human-only — bash never emits this itself, it is reserved for the intelligence-update skill to report
 IS_RC_AHEAD=4               # project stamped newer than this engine understands
 IS_RC_ABORTED_INCOMPLETE=5  # staged module incomplete; legacy left intact
 
@@ -58,6 +58,8 @@ engine_version() {
 
 # _ver_gt A B → true if semver A is strictly greater than B (numeric x.y.z;
 # any non-numeric suffix on a field is ignored). Missing fields = 0.
+# Pre-release/build metadata ordering is intentionally NOT handled — the
+# stamp only ever stores plain x.y.z, so this is sufficient.
 _ver_gt() {
     local a="$1" b="$2" i ai bi
     local -a A B
@@ -258,7 +260,10 @@ run_migrations() {
     for v in "${MIGRATIONS[@]}"; do
         "migrate_to_$v" "$umbrella" "$module_name" "$upstream"
         rc=$?
-        [ "$rc" -ne 0 ] && return "$rc"
+        # Explicit if (not `[ ] && return`): the terse form's trailing false
+        # test would be the loop body's last status, making correctness hinge
+        # on a subtle `set -e` &&-list exemption + the post-loop `return 0`.
+        if [ "$rc" -ne 0 ]; then return "$rc"; fi
     done
     return 0
 }

@@ -291,6 +291,39 @@ jobs:
           echo "$out" | grep -q 'IS_STATUS=ahead-of-engine' || { echo "missing ahead-of-engine status"; exit 1; }
           ! test -f AGENTS.md   # refused → nothing generated
 
+      - name: Incomplete upstream fails closed (aborted-incomplete, legacy intact)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$STAGE_LIB"
+          # Broken upstream: a clone of this repo with the engine's common.sh
+          # removed → migrate_to_0_3_1's sentinel must refuse before deleting
+          # anything.
+          BROKEN=$RUNNER_TEMP/broken-upstream
+          mkdir -p "$BROKEN"
+          tar --exclude='.git' -cf - . | (cd "$BROKEN" && tar -xf -)
+          rm -f "$BROKEN/intelligence/sync/scripts/lib/common.sh"
+          git -C "$BROKEN" init -q
+          git -C "$BROKEN" add -A
+          git -C "$BROKEN" -c user.email=ci@example.com -c user.name=ci commit -q -m broken
+
+          PROJ=$RUNNER_TEMP/legacy3
+          stage_legacy "$PROJ"
+          cd "$PROJ"
+          set +e
+          out=$(REPO_URL="file://$BROKEN" bash intelligence/scripts/update.sh --yes); rc=$?
+          set -e
+          echo "$out"
+          [ "$rc" -eq 5 ] || { echo "expected exit 5 (aborted-incomplete), got $rc"; exit 1; }
+          echo "$out" | grep -q 'IS_STATUS=aborted-incomplete' || { echo "missing aborted-incomplete status"; exit 1; }
+          # Crash-safety: legacy left fully intact, nothing migrated/edited.
+          test -d intelligence/scripts
+          test -e intelligence/INIT.md
+          test -d intelligence/skills/intelligence-sync
+          test -f intelligence/skills/backend-add-endpoint/SKILL.md
+          ! grep -q '"intelligence/sync/skills"' intelligence/config.yaml
+          ! test -f intelligence/sync/.intelligence-sync-version
+
   guardrails:
     name: guardrails (refuse dangerous configs)
     runs-on: ubuntu-latest

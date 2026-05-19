@@ -146,7 +146,7 @@ intelligence-sync/
 └── LICENSE                      # MIT License
 ```
 
-Each `intelligence/<module>/` (e.g. `sync/`, future `brain/`) is self-contained and updated independently. The umbrella folder name (`intelligence/`) is never hardcoded — it is whatever holds `config.yaml`.
+Each `intelligence/<module>/` (e.g. `sync/`, future `domain/`) is self-contained and updated independently. The umbrella folder name (`intelligence/`) is never hardcoded — it is whatever holds `config.yaml`.
 
 ## Examples
 

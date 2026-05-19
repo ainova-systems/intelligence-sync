@@ -113,7 +113,7 @@ must act on. Clean up the temp clone.
   is a safe no-op (`IS_STATUS=ok`).
 - Never touch `config.yaml` beyond the engine's own idempotent additive
   `sources.skills` line. Never move/delete project skills, rules, or agents.
-- Multi-module umbrellas (e.g. a `brain/` module beside `sync/`) are fine —
+- Multi-module umbrellas (e.g. a `domain/` module beside `sync/`) are fine —
   this skill only owns `sync/`. Don't touch sibling modules.
 - Check upstream `CHANGELOG.md` for release notes between the stamped version
   and the engine version; include relevant highlights in your summary.
