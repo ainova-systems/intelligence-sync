@@ -8,20 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.3.1] — 2026-05-19
 
-### Breaking
+### Changed
 
-- **Modular layout.** Engine, meta-skills, `INIT.md`, vendored docs move into one self-contained module `<umbrella>/sync/`. *Post-condition:* no `intelligence-*` under `<umbrella>/skills/`; `<umbrella>/{scripts,INIT.md,docs}` gone; `<umbrella>/sync/scripts/sync.sh` exists.
-- **Schema-version key.** `config.yaml` gains the managed, permanent, top-level scalar `intelligence_sync_version` (no migration ever renames/moves it). *Post-condition:* it equals the engine `scripts/VERSION`, once, plus an additive `sources.skills` entry for the module skills path.
+- Engine, meta-skills, `INIT.md`, and docs moved into one self-contained module `<umbrella>/sync/`. Project content stays at the umbrella level.
+- Versioned migration chain with a `intelligence_sync_version` key in `config.yaml`; `sync.sh` only syncs, `update.sh` migrates. See `docs/CONVENTIONS.md`.
 
-### Added / Changed
-
-- Versioned breaking-change architecture: ordered `migrate_to_<ver>` chain, idempotent structural preconditions (correctness never depends on the stamp), transactional + fail-closed.
-- bash↔skill status contract: `IS_STATUS=<code>` + exit codes (`ok`/`migrated` 0, `error` 1, `config-missing` 2, `ambiguous` 3, `ahead-of-engine` 4, `aborted-incomplete` 5, `needs-update` 6).
-- `sync.sh` is a pure synchronizer (never migrates; fails closed `needs-update` across a gap); `update.sh` is the sole migrator. Umbrella/module names not hardcoded. Reserved `intelligence-` prefix. See `docs/CONVENTIONS.md`.
-
-### Updating
-
-Tell your AI coding agent **"Update intelligence-sync"** — the `intelligence-update` skill reads this changelog across the version gap, runs the migration chain, and verifies. Idempotent.
+To update: tell your agent **"Update intelligence-sync"**.
 
 ## [0.2.1] — 2026-05-14
 
