@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034  # IS_RC_*/IS_MIGRATED/IS_VERSION_KEY are the public bash↔skill contract, consumed by the scripts that source this lib
 # intelligence-sync: versioned migrations — breaking-change update architecture
 # Source this file — never execute directly. Requires layout.sh already
 # sourced (uses no globals from it directly; callers pass paths explicitly).

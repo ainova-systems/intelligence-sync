@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034  # LS_* are this lib's public API, consumed by the scripts that source it
 # intelligence-sync: layout detection
 # Source this file — never execute directly.
 #
