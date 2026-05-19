@@ -10,32 +10,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Breaking
 
-- **Modular layout.** The engine, meta-skills, `INIT.md`, and vendored docs move from flat under the umbrella into one self-contained module subfolder `<umbrella>/sync/`. *Post-condition:* no `intelligence-*` directory remains directly under `<umbrella>/skills/`; `<umbrella>/scripts`, `<umbrella>/INIT.md`, `<umbrella>/docs` are gone; `<umbrella>/sync/scripts/sync.sh` exists.
-- **Schema-version key.** `config.yaml` gains a managed top-level scalar `intelligence_sync_version` — a permanent, format-stable contract key (never renamed/moved by any future migration). *Post-condition:* `config.yaml` contains `intelligence_sync_version` equal to the engine `scripts/VERSION`, exactly once, plus an additive `sources.skills` entry for the module skills path.
+- **Modular layout.** Engine, meta-skills, `INIT.md`, vendored docs move into one self-contained module `<umbrella>/sync/`. *Post-condition:* no `intelligence-*` under `<umbrella>/skills/`; `<umbrella>/{scripts,INIT.md,docs}` gone; `<umbrella>/sync/scripts/sync.sh` exists.
+- **Schema-version key.** `config.yaml` gains the managed, permanent, top-level scalar `intelligence_sync_version` (no migration ever renames/moves it). *Post-condition:* it equals the engine `scripts/VERSION`, once, plus an additive `sources.skills` entry for the module skills path.
 
-### Changed
+### Added / Changed
 
-- Project content (`rules/`, `agents/`, non-meta `skills/`) and `config.yaml` stay at the umbrella level. Additional independently-updatable modules (e.g. `domain/`) can sit beside `sync/`. The umbrella folder name is never hardcoded — it is whatever holds `config.yaml`; the engine self-locates by its own path.
-- `sync.sh` is now a **pure synchronizer** — it never migrates. It fails closed (`needs-update`, exit 6) when the project is non-modular or its schema is older than the engine, deferring all migration to the update flow. `update.sh` is the sole migrator.
+- Versioned breaking-change architecture: ordered `migrate_to_<ver>` chain, idempotent structural preconditions (correctness never depends on the stamp), transactional + fail-closed.
+- bash↔skill status contract: `IS_STATUS=<code>` + exit codes (`ok`/`migrated` 0, `error` 1, `config-missing` 2, `ambiguous` 3, `ahead-of-engine` 4, `aborted-incomplete` 5, `needs-update` 6).
+- `sync.sh` is a pure synchronizer (never migrates; fails closed `needs-update` across a gap); `update.sh` is the sole migrator. Umbrella/module names not hardcoded. Reserved `intelligence-` prefix. See `docs/CONVENTIONS.md`.
 
-### Added
+### Updating
 
-- **Versioned breaking-change architecture.** `lib/migrations.sh` holds an ordered registry (`MIGRATIONS=()`) + dispatcher; each breaking change ships as one `migrate_to_<ver>`. Correctness rests on **idempotent structural preconditions** (each migration self-detects and no-ops if already applied) — a wrong/missing version stamp can never skip a needed migration. The chain is transactional and fail-closed: stage → verify sentinel → commit → only then delete prior state.
-- **bash ↔ skill status contract.** Any unresolvable state emits `IS_STATUS=<code>` + a stable exit code: `ok`/`migrated` (0), `error` (1), `config-missing` (2), `ambiguous` (3), `ahead-of-engine` (4), `aborted-incomplete` (5), `needs-update` (6). The `intelligence-update` skill is the intelligent layer: it discovers the engine by role, reads this CHANGELOG across the version gap (surfacing `### Breaking` items), runs the chain, branches on the code, and verifies each breaking post-condition afterward.
-- **Version-compat guard** (`ahead-of-engine`): a stale engine refuses to operate on a project whose `intelligence_sync_version` is newer than it understands.
-
-### Migrating a pre-0.3.1 project
-
-There is **no manual procedure and no deadline**. A pre-0.3.1 project's frozen `update.sh` fails **closed** (exits non-zero, changes nothing — no data loss, ever, however long it sits). To migrate, tell your AI coding agent:
-
-> **Update intelligence-sync**
-
-The `intelligence-update` skill discovers the engine, reads the changelog, drives the migration chain, resolves issues, and verifies the breaking post-conditions. Idempotent and safe to repeat.
-
-### Compatibility
-
-- Upstream is **pure modular** — no flat bridge, no duplicated trees. Old clients fail closed (safe) until migrated; no calendar cutover.
-- Reserved prefix: project skills must not use the `intelligence-` prefix.
+Tell your AI coding agent **"Update intelligence-sync"** — the `intelligence-update` skill reads this changelog across the version gap, runs the migration chain, and verifies. Idempotent.
 
 ## [0.2.1] — 2026-05-14
 
