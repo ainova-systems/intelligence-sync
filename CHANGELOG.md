@@ -4,7 +4,7 @@ All notable changes to intelligence-sync are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Breaking-change convention:** any release that changes a structure the engine migrates (layout, `config.yaml` schema, …) carries a **`### Breaking`** subsection. Each item states its post-condition so the `intelligence-update` skill can verify it after applying. This marker is part of the update contract — do not omit it for breaking releases.
+> **Upgrading:** tell your agent **"Update intelligence-sync"**. If its `update.sh` reports `upstream layout unexpected`, the engine has moved into `<intel>/sync/` — recover by reading and following upstream `intelligence/sync/INIT.md`.
 
 ## [0.3.1] — 2026-05-19
 
