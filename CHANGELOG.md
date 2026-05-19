@@ -4,9 +4,11 @@ All notable changes to intelligence-sync are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Upgrading.** Paste this to your AI agent:
->
-> Update intelligence-sync: fetch the latest engine from https://github.com/ainova-systems/intelligence-sync and run its update flow to migrate this project to the newest version. Leave my rules, agents, and project skills untouched.
+**Upgrading** — paste this to your AI agent:
+
+```
+Update intelligence-sync: fetch the latest engine from https://github.com/ainova-systems/intelligence-sync and run its update flow to migrate this project to the newest version. Leave my rules, agents, and project skills untouched.
+```
 
 ## [0.3.1] — 2026-05-19
 
@@ -14,8 +16,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Engine, meta-skills, `INIT.md`, and docs moved into one self-contained module `<umbrella>/sync/`. Project content stays at the umbrella level.
 - Versioned migration chain with a `sync_version` key in `config.yaml`; `sync.sh` only syncs, `update.sh` migrates. See `docs/CONVENTIONS.md`.
-
-To update: tell your agent **"Update intelligence-sync"**.
 
 ## [0.2.1] — 2026-05-14
 
