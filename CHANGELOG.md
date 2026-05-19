@@ -13,7 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - Engine, meta-skills, `INIT.md`, and docs moved into one self-contained module `<umbrella>/sync/`. Project content stays at the umbrella level.
-- Versioned migration chain with a `intelligence_sync_version` key in `config.yaml`; `sync.sh` only syncs, `update.sh` migrates. See `docs/CONVENTIONS.md`.
+- Versioned migration chain with a `sync_version` key in `config.yaml`; `sync.sh` only syncs, `update.sh` migrates. See `docs/CONVENTIONS.md`.
 
 To update: tell your agent **"Update intelligence-sync"**.
 

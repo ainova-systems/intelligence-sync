@@ -46,14 +46,14 @@ if [ "$_vc_rc" -ne 0 ]; then exit "$_vc_rc"; fi
 
 # Schema gap → refuse; the update flow must apply the migration chain first.
 # Per the contract, an ABSENT stamp means pre-0.3.1 / un-applied schema — a
-# modular tree with no `intelligence_sync_version` must NOT silently sync
+# modular tree with no `sync_version` must NOT silently sync
 # (that would bypass migrations). A correctly bootstrapped project always has
 # the key (INIT emits it; update.sh stamps it).
 _stamp="$(read_engine_stamp "$_cf")"
 _eng="$(engine_version)"
 if [ -z "$_stamp" ]; then
-    is_status needs-update "stamped= engine=$_eng (no intelligence_sync_version)"
-    echo "ERROR: config.yaml has no intelligence_sync_version — schema un-applied." >&2
+    is_status needs-update "stamped= engine=$_eng (no sync_version)"
+    echo "ERROR: config.yaml has no sync_version — schema un-applied." >&2
     echo "       Run the update flow first: tell your agent \"Update intelligence-sync\"." >&2
     exit "$IS_RC_NEEDS_UPDATE"
 elif [ -n "$_eng" ] && _ver_gt "$_eng" "$_stamp"; then
