@@ -4,7 +4,9 @@ All notable changes to intelligence-sync are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Upgrading:** tell your agent **"Update intelligence-sync"**. If its `update.sh` reports `upstream layout unexpected`, the engine has moved into `<intel>/sync/` — recover by reading and following upstream `intelligence/sync/INIT.md`.
+> **Upgrading.** Paste this to your AI agent:
+>
+> Update intelligence-sync: fetch the latest engine from https://github.com/ainova-systems/intelligence-sync and run its update flow to migrate this project to the newest version. Leave my rules, agents, and project skills untouched.
 
 ## [0.3.1] — 2026-05-19
 
