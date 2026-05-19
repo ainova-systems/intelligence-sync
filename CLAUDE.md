@@ -61,3 +61,5 @@ When editing the `intelligence-*` skills or any rule/agent, follow `docs/CONVENT
 ## Commit messages
 
 Capitalized, past tense, one sentence (e.g. `Added Codex adapter with AGENTS.md generation`) — matches existing history.
+
+**Never add a `Co-Authored-By` trailer or any AI/tool attribution to commit messages or pull request bodies.**
