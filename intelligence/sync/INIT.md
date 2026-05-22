@@ -407,7 +407,7 @@ Gitignored user preferences:
 
 ### Frontmatter
 
-**YAML safety (required):** **always wrap `description` and any other free-text string field in double quotes**, even when no special characters are present. Codex CLI uses strict YAML — an unquoted colon, hyphen, or word that parses as boolean (`yes`, `no`) silently breaks the file. Quoting unconditionally removes a whole class of bugs and makes lint trivial.
+**YAML safety (required):** **always wrap `description` and any other free-text string field in double quotes**, even when no special characters are present. Codex CLI uses strict YAML — an unquoted colon, hyphen, or word that parses as boolean (`yes`, `no`) silently breaks the file. Quoting unconditionally removes a whole class of bugs and makes lint trivial. If the value itself contains a double quote, escape it as `\"` or wrap the value in single quotes — an unescaped inner quote terminates the scalar early. The sync engine auto-escapes inner quotes when it quotes a value, as a backstop.
 
 **Agent:**
 ```yaml
