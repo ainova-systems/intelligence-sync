@@ -114,7 +114,7 @@ lint_frontmatter() {
                 printf "  WARN: %s:%d unquoted colon in value at column %d — wrap value in quotes\n", f, line, col > "/dev/stderr"
             }
             if (value ~ /"/) {
-                printf "  WARN: %s:%d literal double quote in unquoted value — sync escapes it for strict-YAML targets; prefer single quotes for readability\n", f, line > "/dev/stderr"
+                printf "  WARN: %s:%d literal double quote in unquoted value — wrap value in single quotes or escape as \\\" so strict-YAML targets accept it\n", f, line > "/dev/stderr"
             }
         }
     ' "$file"
