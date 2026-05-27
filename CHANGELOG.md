@@ -10,6 +10,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Update intelligence-sync: fetch the latest engine from https://github.com/ainova-systems/intelligence-sync and run its update flow to migrate this project to the newest version. Leave my rules, agents, and project skills untouched. If it fails, read the CHANGELOG "### Breaking" entries between my version and the latest, base your fix plan on them, make sure you are running the latest scripts, and retry; ask me only if it still fails.
 ```
 
+## [0.3.2] — 2026-05-22
+
+### Fixed
+
+- `copy_md_with_quoted_frontmatter` (strict-YAML adapters — Codex `.agents/skills/`) — when wrapping an **unquoted** `description` / `argument-hint` value in double quotes, literal inner `"` (and `\`) are now escaped (`\"`, `\\`). Previously a value such as `Use as a quick "what do we have" view` was wrapped verbatim into `description: "… "what do we have" …"`, which strict YAML parsers reject (`did not find expected key`) — Codex CLI silently skipped the skill at load. Claude's adapter was unaffected (it copies skills verbatim). `lint_frontmatter` now also flags literal double quotes inside unquoted free-text values, and the YAML-safety guidance (`INIT.md`, `intelligence-add-skill`, `intelligence-add-agent`) documents escaping / single-quoting such values.
+
 ## [0.3.1] — 2026-05-19
 
 ### Changed

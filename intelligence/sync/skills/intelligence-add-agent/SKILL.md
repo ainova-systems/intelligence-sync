@@ -46,7 +46,7 @@ argument-hint: <domain> [description]
    ---
    ```
 
-   **YAML safety (required):** **always wrap `description` (and any other free-text string field) in double quotes**, regardless of content. Codex CLI uses strict YAML — an unquoted colon, leading hyphen, or word that parses as boolean (`yes`, `no`, `true`) silently breaks the agent. Quoting unconditionally prevents the entire class of bug.
+   **YAML safety (required):** **always wrap `description` (and any other free-text string field) in double quotes**, regardless of content. Codex CLI uses strict YAML — an unquoted colon, leading hyphen, or word that parses as boolean (`yes`, `no`, `true`) silently breaks the agent. Quoting unconditionally prevents the entire class of bug. If the value itself contains a double quote, escape it as `\"` or wrap it in single quotes so an inner quote does not terminate the scalar early.
 
 6. **Write body** with sections: **Expertise** -> **Before Any Task** -> **Build & Verify**
    - "Before Any Task" must reference: `Read intelligence/rules/<domain>.md before starting`

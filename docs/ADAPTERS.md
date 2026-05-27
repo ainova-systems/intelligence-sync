@@ -38,7 +38,7 @@ Source `lib/common.sh` for these utilities:
 | Function | Description |
 |----------|-------------|
 | `normalize_file_to_lf(file)` | Convert CRLF to LF |
-| `lint_frontmatter(file)` | Warn about unquoted colons / leading tabs (stderr) |
+| `lint_frontmatter(file)` | Warn about unquoted colons, leading tabs, and literal double quotes inside unquoted values (stderr) |
 | `get_frontmatter_value(key, file)` | Extract YAML frontmatter value |
 | `has_frontmatter(file)` | Check for `---` header |
 | `has_paths(file)` | Check for `paths:` field |

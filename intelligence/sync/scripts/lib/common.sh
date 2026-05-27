@@ -44,14 +44,26 @@ yaml_dq_escape() {
 # block; body is preserved verbatim.
 #
 # Quoted fields: description, argument-hint
-# Note: values containing literal `"` or `\` are passed through assuming the
-# author already escaped them; lint_frontmatter warns on suspicious cases.
+# When wrapping an unquoted value, literal `\` and `"` inside it are escaped
+# (`\\`, `\"`) so an inner quote — e.g. `Use as a quick "what do we have" view`
+# — cannot prematurely terminate the generated double-quoted scalar. Values the
+# author already wrapped (in `"` or `'`) pass through untouched.
 #
 # Usage: copy_md_with_quoted_frontmatter "src.md" "dst.md"
 copy_md_with_quoted_frontmatter() {
     local src="$1"
     local dst="$2"
     awk '
+        function yamlq(s,    out, i, c) {
+            out = ""
+            for (i = 1; i <= length(s); i++) {
+                c = substr(s, i, 1)
+                if (c == "\\") out = out "\\\\"
+                else if (c == "\"") out = out "\\\""
+                else out = out c
+            }
+            return out
+        }
         BEGIN { state = "before" }
         { sub(/\r$/, "") }
         state == "before" {
@@ -71,7 +83,7 @@ copy_md_with_quoted_frontmatter() {
             first = substr(val, 1, 1)
             last = substr(val, length(val), 1)
             if ((first == "\"" && last == "\"") || (first == "\047" && last == "\047")) { print; next }
-            print key ": \"" val "\""
+            print key ": \"" yamlq(val) "\""
             next
         }
         state == "after" { print }
@@ -100,6 +112,9 @@ lint_frontmatter() {
             if (value ~ /:[[:space:]]/ || value ~ /:$/) {
                 col = index(value, ":") + value_start
                 printf "  WARN: %s:%d unquoted colon in value at column %d — wrap value in quotes\n", f, line, col > "/dev/stderr"
+            }
+            if (value ~ /"/) {
+                printf "  WARN: %s:%d literal double quote in unquoted value — wrap value in single quotes or escape as \\\" so strict-YAML targets accept it\n", f, line > "/dev/stderr"
             }
         }
     ' "$file"

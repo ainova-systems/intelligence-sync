@@ -1,2 +1,10 @@
-# Force LF line endings for shell scripts (critical for bash on all platforms)
+# Force LF line endings repo-wide. The engine is zero-dependency bash + awk
+# that runs on Windows/macOS/Linux; CRLF in any source it parses (or in the
+# files it generates) is a cross-platform hazard, so normalize all text to LF
+# regardless of a contributor's core.autocrlf. Binaries are auto-detected and
+# left untouched. This also silences git's "LF will be replaced by CRLF" warning.
+* text=auto eol=lf
+
+# Shell scripts are always LF — critical for bash on all platforms (explicit
+# even though the rule above already covers them).
 *.sh text eol=lf
