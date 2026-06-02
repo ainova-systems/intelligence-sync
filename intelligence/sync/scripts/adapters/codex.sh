@@ -19,27 +19,7 @@ sync_codex_skills() {
     local config_file="$2"
     local output_dir="$3"
 
-    local count=0
-    while IFS= read -r src; do
-        [ -z "$src" ] && continue
-        local dir="$repo_root/$src"
-        [ -d "$dir" ] || continue
-        for d in "$dir"/*/; do
-            [ -d "$d" ] || continue
-            local skill_name
-            skill_name="$(basename "$d")"
-            [ -f "$d/SKILL.md" ] || continue
-            mkdir -p "$output_dir/$skill_name"
-            # Codex CLI uses strict YAML — unquoted description/argument-hint
-            # values silently break the skill. Adapter enforces quoting on copy.
-            copy_md_with_quoted_frontmatter "$d/SKILL.md" "$output_dir/$skill_name/SKILL.md"
-            normalize_file_to_lf "$output_dir/$skill_name/SKILL.md"
-            count=$((count + 1))
-            echo "  skill: $skill_name"
-        done
-    done < <(read_yaml_list "$config_file" "skills")
-
-    echo "  -> Skills: $count"
+    sync_open_skill_dirs "$repo_root" "$config_file" "$output_dir"
 }
 
 # Sync agents to Codex format (.codex/agents/{name}.toml)
@@ -124,14 +104,9 @@ sync_to_codex() {
 
     echo "=== OpenAI Codex ==="
 
-    # Skills -> .agents/skills/ (Codex reads from this fixed path)
+    # Skills -> .agents/skills/ (Codex reads from this fixed path).
+    # `sync_open_skill_dirs` owns clean + populate of this shared dir.
     local skills_dir="$repo_root/.agents/skills"
-    if [ -d "$skills_dir" ]; then
-        find "$skills_dir" -mindepth 1 -maxdepth 1 -type d | while read -r d; do
-            rm -rf "$d"
-        done
-    fi
-    mkdir -p "$skills_dir"
     sync_codex_skills "$repo_root" "$config_file" "$skills_dir"
 
     # Agents -> .codex/agents/

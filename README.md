@@ -6,22 +6,22 @@ Write standards once in plain markdown. The sync engine routes content into the 
 
 ## The problem
 
-Teams running multiple AI coding agents (Claude Code, Cursor, GitHub Copilot, OpenAI Codex) hit three recurring pains:
+Teams running multiple AI coding agents (Claude Code, Cursor, GitHub Copilot, OpenAI Codex, Pi) hit three recurring pains:
 
 1. **Rule drift.** The same coding standards live in `.claude/rules/`, `.cursor/rules/`, `.github/instructions/`, `AGENTS.md`, `CLAUDE.md`. Six copies, six chances to forget an update.
-2. **Context duplication.** `AGENTS.md` is read natively by Cursor / Copilot / Codex. If `.cursor/rules/` mirrors the same content, the model sees rules twice and burns context window. Cursor users complain about this on the official forum.
+2. **Context duplication.** `AGENTS.md` is read natively by Cursor / Copilot / Codex / Pi. If `.cursor/rules/` mirrors the same content, the model sees rules twice and burns context window. Cursor users complain about this on the official forum.
 3. **Format chaos.** Each tool has its own frontmatter (`paths:` vs `globs:` vs `applyTo:`), its own model naming (`opus`/`sonnet` vs `gpt-5.5`/`gpt-5.5-codex`), and its own rule-scoping rules. Migrating between tools — or supporting all of them — means manual rewrites.
 
 ## Why intelligence-sync
 
 You author rules / agents / skills once in tool-agnostic markdown under `intelligence/`. The sync engine knows each IDE's quirks (which files it reads, which scoping it supports, which model names map where) and routes content correctly:
 
-- **Always-on rules** are inlined into `AGENTS.md` as the single canonical source — Cursor, Copilot, Codex all pick them up natively.
+- **Always-on rules** are inlined into `AGENTS.md` as the single canonical source — Cursor, Copilot, Codex, and Pi all pick them up natively.
 - **Path-scoped rules** stay in tool-specific channels with native scoping (`.cursor/rules/*.mdc` with `globs:`, `.github/instructions/*.instructions.md` with `applyTo:`) so monorepo glob targeting actually works.
 - **Claude Code** receives the full rule set in `.claude/rules/` because it does not read AGENTS.md.
 - **No duplication** between AGENTS.md and IDE rule directories — the design avoids it by routing, not flagging.
 
-Source `intelligence/` is committed; generated IDE directories (`.claude/`, `.cursor/`, `.codex/`, `.agents/`) are gitignored. `AGENTS.md` is also committed — it is the canonical artifact humans and AI tools reference.
+Source `intelligence/` is committed; generated IDE directories (`.claude/`, `.cursor/`, `.codex/`, `.agents/`) and adapter-owned Pi files under `.pi/` are gitignored. `AGENTS.md` is also committed — it is the canonical artifact humans and AI tools reference.
 
 ## How
 
@@ -41,7 +41,7 @@ intelligence/                  AGENTS.md   .claude/    .cursor/    .github/     
 
 ## Works with
 
-**Claude Code** · **Cursor** · **GitHub Copilot** · **OpenAI Codex** · **Any IDE** (via pluggable adapter)
+**Claude Code** · **Cursor** · **GitHub Copilot** · **OpenAI Codex** · **Pi** · **Any IDE** (via pluggable adapter)
 
 Skills follow the [Agent Skills open standard](https://agentskills.io). Rules and `AGENTS.md` follow each tool's native formats.
 
@@ -111,16 +111,16 @@ paths:
 
 ### What each adapter does
 
-| Source | Claude Code | Cursor | Copilot | Codex | AGENTS.md |
-|---|---|---|---|---|---|
-| Rule with `paths:` (scoped) | copy as-is | `globs:` in `.mdc` | `applyTo:` in `.instructions.md` | not supported | listed by name |
-| Rule without `paths:` (always-on) | copy as-is | skipped | skipped | skipped | **inlined as canonical** |
-| `tier:` | `model:` | `model:` | `model:` | `model:` | n/a |
-| `access:` | `tools:` | `readonly:` | `tools:` | `sandbox_mode:` | n/a |
-| skills | SKILL.md | SKILL.md | SKILL.md | SKILL.md | listed |
-| agents | transformed | transformed | `.agent.md` | `.toml` | listed |
+| Source | Claude Code | Cursor | Copilot | Codex | Pi | AGENTS.md |
+|---|---|---|---|---|---|---|
+| Rule with `paths:` (scoped) | copy as-is | `globs:` in `.mdc` | `applyTo:` in `.instructions.md` | not supported | extension + on-demand rule files | listed by name |
+| Rule without `paths:` (always-on) | copy as-is | skipped | skipped | skipped | skipped | **inlined as canonical** |
+| `tier:` | `model:` | `model:` | `model:` | `model:` | prompt template | n/a |
+| `access:` | `tools:` | `readonly:` | `tools:` | `sandbox_mode:` | prompt guidance | n/a |
+| skills | SKILL.md | SKILL.md | SKILL.md | SKILL.md | SKILL.md via `.agents/skills/` | listed |
+| agents | transformed | transformed | `.agent.md` | `.toml` | `.pi/prompts/*.md` | listed |
 
-Cursor, Copilot, and Codex all read AGENTS.md natively — always-on rules are inlined there once instead of being duplicated into each tool's native channel. Path-scoped rules stay in the native channels so monorepo glob targeting still works. Claude Code does not yet read AGENTS.md, so its adapter receives the full rule set.
+Cursor, Copilot, Codex, and Pi all read AGENTS.md natively — always-on rules are inlined there once instead of being duplicated into each tool's native channel. Path-scoped rules stay in native per-tool channels where those exist; Pi gets a generated extension that lists scoped rules and tells the model to `read` them on demand. Claude Code does not yet read AGENTS.md, so its adapter receives the full rule set.
 
 ## Project Structure
 
@@ -139,7 +139,7 @@ intelligence-sync/
 │       │   ├── update.sh        # Self-update from upstream
 │       │   ├── VERSION          # Module version (drives migrations)
 │       │   ├── lib/             # common.sh, layout.sh, migrations.sh
-│       │   └── adapters/        # 5 built-in + template
+│       │   └── adapters/        # 6 built-in + template
 │       └── skills/intelligence-*  # Pre-installed meta-skills
 ├── examples/                    # config.yaml for different project types
 ├── docs/                        # Conventions and adapter guide (source)
@@ -151,6 +151,7 @@ Each `intelligence/<module>/` (e.g. `sync/`, future `domain/`) is self-contained
 ## Examples
 
 - [go-api](examples/go-api/) -- Single Go API service
+- [go-api-with-pi-and-codex](examples/go-api-with-pi-and-codex/) -- Go API with Pi + Codex sharing AGENTS.md and `.agents/skills/`
 - [dotnet-api-with-react-frontend](examples/dotnet-api-with-react-frontend/) -- .NET backend + React frontend
 - [platform-with-submodules](examples/platform-with-submodules/) -- Multi-component platform with git submodules
 
