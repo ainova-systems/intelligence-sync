@@ -116,7 +116,7 @@ paths:
 | Rule with `paths:` (scoped) | copy as-is | `globs:` in `.mdc` | `applyTo:` in `.instructions.md` | not supported | extension + on-demand rule files | not supported (use `instructions:` in `opencode.json`) | listed by name |
 | Rule without `paths:` (always-on) | copy as-is | skipped | skipped | skipped | skipped | skipped | **inlined as canonical** |
 | `tier:` | `model:` | `model:` | `model:` | `model:` | prompt template | `model:` | n/a |
-| `access:` | `tools:` | `readonly:` | `tools:` | `sandbox_mode:` | prompt guidance | `permission.edit`/`bash` | n/a |
+| `access:` | `tools:` | `readonly:` | `tools:` | `sandbox_mode:` | prompt guidance | `permission.edit`/`permission.bash` | n/a |
 | skills | SKILL.md | SKILL.md | SKILL.md | SKILL.md | SKILL.md via `.agents/skills/` | SKILL.md via `.agents/skills/` | listed |
 | agents | transformed | transformed | `.agent.md` | `.toml` | `.pi/prompts/*.md` | `.opencode/agents/*.md` (subagent) | listed |
 
