@@ -12,6 +12,8 @@ Update intelligence-sync: fetch the latest engine from https://github.com/ainova
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-06-02
+
 ### Added
 
 - Pi adapter (`pi.sh`) — reuses `AGENTS.md` for always-on rules, copies skills into the shared Agent Skills open-standard location (`.agents/skills/`), generates `.pi/prompts/intelligence-agent-*.md` prompt templates from source agents, and emits a small Pi extension (`.pi/extensions/intelligence-sync-rules.ts`) plus `.pi/intelligence-sync/rules/*.md` for path-scoped rules. This keeps Pi support additive and non-conflicting with existing Cursor/Copilot/Codex routing.
