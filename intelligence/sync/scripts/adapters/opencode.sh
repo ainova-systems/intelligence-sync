@@ -18,22 +18,10 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
-# Strip frontmatter, return body only (same shape as Pi's pi_agent_body).
-opencode_agent_body() {
-    local file="$1"
-    awk '
-        BEGIN { in_fm = 0; past_fm = 0 }
-        { sub(/\r$/, "") }
-        /^---$/ {
-            if (!past_fm) {
-                in_fm = !in_fm
-                if (!in_fm) { past_fm = 1 }
-                next
-            }
-        }
-        past_fm { print }
-    ' "$file"
-}
+# Strip frontmatter, return body only.
+# Direct call to the shared `strip_frontmatter` helper in lib/common.sh —
+# duplicating the awk block here would violate the "all parsing in common.sh"
+# convention (see CLAUDE.md / docs/CONVENTIONS.md).
 
 sync_opencode_skills() {
     local repo_root="$1"
@@ -67,7 +55,7 @@ sync_opencode_agents() {
             tier="$(get_frontmatter_value "tier" "$f")"
             access="$(get_frontmatter_value "access" "$f")"
             description="$(get_frontmatter_value "description" "$f")"
-            body="$(opencode_agent_body "$f")"
+            body="$(strip_frontmatter "$f")"
 
             local model edit_perm bash_perm
             model="$(get_model "$config_file" "opencode" "$tier")"

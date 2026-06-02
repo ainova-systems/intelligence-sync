@@ -215,6 +215,29 @@ has_frontmatter() {
     awk 'NR==1 { sub(/\r$/, ""); if ($0 == "---") print 1; else print 0; exit }' "$file"
 }
 
+# Strip YAML frontmatter, print body only.
+# Reads the first `---` ... `---` block at the top of the file and emits
+# everything after the closing fence verbatim. CRLF-safe (trailing \r stripped
+# per line). If the file has no frontmatter, the entire file is printed.
+# Shared by adapters that wrap source agent bodies into IDE-native templates
+# (currently pi.sh, opencode.sh) — do NOT inline-duplicate this awk block.
+# Usage: body="$(strip_frontmatter "path/to/file.md")"
+strip_frontmatter() {
+    local file="$1"
+    awk '
+        BEGIN { in_fm = 0; past_fm = 0 }
+        { sub(/\r$/, "") }
+        /^---$/ {
+            if (!past_fm) {
+                in_fm = !in_fm
+                if (!in_fm) { past_fm = 1 }
+                next
+            }
+        }
+        past_fm { print }
+    ' "$file"
+}
+
 # Check if a file has a paths: field in frontmatter.
 # Scoped to the first `---` ... `---` block — body content like a code
 # example referencing `paths: foo` will not be miscounted.
@@ -252,9 +275,9 @@ get_model_default() {
         codex:heavy)      echo "gpt-5.5" ;;
         codex:standard)   echo "gpt-5.5-codex" ;;
         codex:light)      echo "gpt-5.5-mini" ;;
-        opencode:heavy)    echo "anthropic/claude-opus-4-20250514" ;;
-        opencode:standard) echo "anthropic/claude-sonnet-4-20250514" ;;
-        opencode:light)    echo "anthropic/claude-haiku-4-20250514" ;;
+        opencode:heavy)    echo "anthropic/claude-opus-4-8" ;;
+        opencode:standard) echo "anthropic/claude-sonnet-4-6" ;;
+        opencode:light)    echo "anthropic/claude-haiku-4-5-20251001" ;;
         *)                echo "" ;;
     esac
 }
