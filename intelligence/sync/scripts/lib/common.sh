@@ -90,6 +90,55 @@ copy_md_with_quoted_frontmatter() {
     ' "$src" > "$dst"
 }
 
+# Copy SKILL.md directories into an Agent Skills open-standard location.
+# The destination is a directory whose immediate children are skill folders
+# containing SKILL.md (e.g. .agents/skills/<name>/SKILL.md). Free-text
+# frontmatter fields are quoted for strict YAML consumers; lenient consumers
+# accept the result unchanged, so this one copy can be shared across tools.
+#
+# Owns the full lifecycle of `$output_dir`: removes every existing skill
+# subfolder, recreates the directory, then populates it. Sibling FILES at
+# `$output_dir` are preserved (only immediate subdirectories are pruned).
+# Multiple adapters may target the same path (e.g. Codex + Pi both write to
+# `.agents/skills/`); calls are idempotent because every caller writes the
+# same content from `intelligence/skills/`. Adapters MUST NOT do their own
+# clean / mkdir for this dir — the helper is the single owner.
+#
+# Usage: sync_open_skill_dirs "$REPO_ROOT" "$CONFIG_FILE" "$dest_dir"
+sync_open_skill_dirs() {
+    local repo_root="$1"
+    local config_file="$2"
+    local output_dir="$3"
+
+    if [ -d "$output_dir" ]; then
+        # Prune both real subdirectories and symlinks (incl. dir-symlinks):
+        # "-type d" alone would leave a stale symlinked skill in place and
+        # break the "helper owns the full lifecycle" contract.
+        find "$output_dir" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -exec rm -rf {} +
+    fi
+    mkdir -p "$output_dir"
+
+    local count=0
+    while IFS= read -r src; do
+        [ -z "$src" ] && continue
+        local dir="$repo_root/$src"
+        [ -d "$dir" ] || continue
+        for d in "$dir"/*/; do
+            [ -d "$d" ] || continue
+            local skill_name
+            skill_name="$(basename "$d")"
+            [ -f "$d/SKILL.md" ] || continue
+            mkdir -p "$output_dir/$skill_name"
+            copy_md_with_quoted_frontmatter "$d/SKILL.md" "$output_dir/$skill_name/SKILL.md"
+            normalize_file_to_lf "$output_dir/$skill_name/SKILL.md"
+            count=$((count + 1))
+            echo "  skill: $skill_name"
+        done
+    done < <(read_yaml_list "$config_file" "skills")
+
+    echo "  -> Skills: $count"
+}
+
 # Lint YAML frontmatter for common pitfalls (unquoted colons, leading tabs).
 # Print warnings to stderr; do not fail. Strict consumers (Codex CLI) reject
 # these files with cryptic messages — catching them in sync gives better DX.

@@ -96,15 +96,19 @@ echo "  Root:   $REPO_ROOT"
 echo ""
 
 # Invariant: AGENTS.md is the canonical carrier of always-on rules for
-# Cursor / Copilot / Codex (their adapters skip always-on rules to avoid
-# duplication). If those targets are enabled, `agents` must also be enabled
-# — otherwise always-on rules go nowhere for those tools.
+# Cursor / Copilot / Codex / Pi (their adapters skip always-on rules to avoid
+# duplication, or in Pi's case rely on AGENTS.md for baseline project
+# context). If those targets are enabled, `agents` must also be enabled —
+# otherwise always-on rules go nowhere for those tools.
 # Skip the check when the user requested a single target via $TARGET_FILTER:
 # they may be syncing only one IDE intentionally.
 if [ -z "$TARGET_FILTER" ]; then
     agents_enabled=$(is_target_enabled "$CONFIG_FILE" "agents")
     if [ "$agents_enabled" != "1" ]; then
-        for tool in cursor copilot codex; do
+        # AGENTS.md-dependent adapters: any tool whose adapter skips always-on
+        # rule emission (because the tool reads AGENTS.md natively) must be
+        # listed here. Add new adapters to this list when they ship.
+        for tool in cursor copilot codex pi; do
             if [ "$(is_target_enabled "$CONFIG_FILE" "$tool")" = "1" ]; then
                 echo "ERROR: targets.$tool is enabled but targets.agents is not." >&2
                 echo "  $tool relies on AGENTS.md to deliver always-on rules — without it," >&2
