@@ -227,6 +227,10 @@ strip_frontmatter() {
     awk '
         BEGIN { in_fm = 0; past_fm = 0 }
         { sub(/\r$/, "") }
+        # No frontmatter: first line is not a `---` fence — treat the whole
+        # file as body so the helper honors its "print everything if no
+        # frontmatter" contract instead of emitting nothing.
+        NR == 1 && $0 != "---" { past_fm = 1 }
         /^---$/ {
             if (!past_fm) {
                 in_fm = !in_fm
