@@ -1,0 +1,28 @@
+# Example: Go API service with opencode
+# Demonstrates the minimal config to enable the opencode adapter alongside
+# the always-on AGENTS.md (which opencode reads natively).
+
+project:
+  name: my-api
+
+sync_version: "0.3.2"
+
+sources:
+  rules:
+    - "intelligence/rules"
+  agents:
+    - "intelligence/agents"
+  skills:
+    - "intelligence/skills"
+
+targets:
+  agents:
+    enabled: true
+    output: "AGENTS.md"
+    header: |
+      # My API
+
+      Go 1.22 HTTP API | Postgres | opencode example
+
+      **Full context**: [`intelligence/rules/context.md`](intelligence/rules/context.md)
+  opencode: { enabled: true, output: ".opencode" }

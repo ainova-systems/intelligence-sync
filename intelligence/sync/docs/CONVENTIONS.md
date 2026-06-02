@@ -93,13 +93,13 @@ Rule content in markdown...
 
 ### Sync Transformations (Rules)
 
-| Source | Claude | Cursor | Copilot | Codex / Pi / AGENTS.md |
+| Source | Claude | Cursor | Copilot | Codex / Pi / opencode / AGENTS.md |
 |--------|--------|--------|---------|------------------------|
 | `paths:` (scoped) | copied | `globs:` in `.mdc` | `applyTo:` in `.instructions.md` | listed in AGENTS.md; Pi also gets generated on-demand rule files + extension |
 | no `paths:` (always-on) | copied | skipped | skipped | inlined into AGENTS.md |
 | extension | `.md` | `.mdc` | `.instructions.md` | inline / generated extension / n/a |
 
-Always-on rule content is inlined once into AGENTS.md (which Cursor, Copilot, Codex, and Pi read natively); the per-IDE rule channels carry only path-scoped rules to preserve monorepo glob targeting without duplicating context. Claude Code does not read AGENTS.md, so its adapter receives the full rule set.
+Always-on rule content is inlined once into AGENTS.md (which Cursor, Copilot, Codex, Pi, and opencode read natively); the per-IDE rule channels carry only path-scoped rules to preserve monorepo glob targeting without duplicating context. Claude Code does not read AGENTS.md, so its adapter receives the full rule set. opencode has no first-class path-scoped channel (users may opt in via `instructions:` globs in `opencode.json`), so the opencode adapter does not generate scoped-rule files.
 
 ## Skill Frontmatter
 
@@ -234,10 +234,11 @@ Apply to skill bodies, rule bodies, and agent bodies — anywhere LLM-facing ins
 | GitHub Copilot | `.github/instructions/*.instructions.md` (scoped only) | `.github/skills/` | `.github/agents/` | Partial |
 | OpenAI Codex | none (reads `AGENTS.md`) | `.agents/skills/` | `.codex/agents/*.toml` | Yes |
 | Pi | `.pi/intelligence-sync/rules/*.md` + `.pi/extensions/intelligence-sync-rules.ts` (scoped only; always-on via `AGENTS.md`) | `.agents/skills/` | `.pi/prompts/intelligence-agent-*.md` | Partial |
+| opencode | none (always-on via `AGENTS.md`; users may opt in to scoped rules via `instructions:` globs in `opencode.json`) | `.agents/skills/` | `.opencode/agents/*.md` (mode: subagent) | Yes |
 
-Skill locations all comply with the Agent Skills open standard. Cursor reads from `.cursor/skills/` and `.agents/skills/`; Copilot reads from `.github/skills/`, `.claude/skills/`, and `.agents/skills/`; Codex and Pi read from `.agents/skills/`; Claude Code reads from `.claude/skills/`.
+Skill locations all comply with the Agent Skills open standard. Cursor reads from `.cursor/skills/` and `.agents/skills/`; Copilot reads from `.github/skills/`, `.claude/skills/`, and `.agents/skills/`; Codex, Pi, and opencode all read from `.agents/skills/`; Claude Code reads from `.claude/skills/`.
 
-**Rule routing rationale:** AGENTS.md is canonical for Cursor/Copilot/Codex/Pi (all read it natively), so always-on rule content is inlined there once and the per-IDE rule directories carry only path-scoped rules — no duplication. Claude Code does not read AGENTS.md, so its adapter receives the full rule set.
+**Rule routing rationale:** AGENTS.md is canonical for Cursor/Copilot/Codex/Pi/opencode (all read it natively), so always-on rule content is inlined there once and the per-IDE rule directories carry only path-scoped rules — no duplication. Claude Code does not read AGENTS.md, so its adapter receives the full rule set.
 
 `AGENTS.md` is always enabled and regenerated on every sync. The static header (`targets.agents.header` in `config.yaml`) is the only hand-authored part; everything below it is rebuilt from frontmatter — agents/skills tables, the rules list, and the inlined content of every always-on rule (those without `paths:`). Path-scoped rules are listed by name only so AGENTS.md does not balloon in monorepos.
 
@@ -291,6 +292,10 @@ CLAUDE.md
 .pi/extensions/intelligence-sync-rules.ts
 .pi/prompts/intelligence-agent-*.md
 
+# opencode: only the generated subagents are owned by the adapter.
+# .opencode/opencode.json (and any other hand-authored config) stays tracked.
+.opencode/agents/
+
 # Claude Code: ignore everything except project-shared settings.
 .claude/*
 !.claude/settings.json
@@ -300,7 +305,7 @@ CLAUDE.md
 !.cursor/settings.json
 ```
 
-The inverse pattern (`.claude/*` + `!.claude/settings.json`) ignores every generated subdir (`rules/`, `skills/`, `agents/`) plus any per-machine state Claude writes (`settings.local.json`, `*.lock`, `scheduled_tasks.*`, `sessions/`, `cache/`, etc.) without having to enumerate filenames Claude may add later. Only `.claude/settings.json` (project-shared bash allowlist, tool permissions) is tracked. Same logic for `.cursor/`. Pi is narrower: only the generated adapter-owned paths are ignored (`.pi/intelligence-sync/`, `.pi/extensions/intelligence-sync-rules.ts`, `.pi/prompts/intelligence-agent-*.md`), so `.pi/settings.json` and any hand-authored Pi extensions/prompts remain available for tracking. If a project needs to track another file under `.claude/` or `.cursor/` (e.g., a hand-authored `.claude/commands/<name>.md`), add another `!<path>` line.
+The inverse pattern (`.claude/*` + `!.claude/settings.json`) ignores every generated subdir (`rules/`, `skills/`, `agents/`) plus any per-machine state Claude writes (`settings.local.json`, `*.lock`, `scheduled_tasks.*`, `sessions/`, `cache/`, etc.) without having to enumerate filenames Claude may add later. Only `.claude/settings.json` (project-shared bash allowlist, tool permissions) is tracked. Same logic for `.cursor/`. Pi and opencode are narrower: only the generated adapter-owned paths are ignored (`.pi/intelligence-sync/`, `.pi/extensions/intelligence-sync-rules.ts`, `.pi/prompts/intelligence-agent-*.md`, `.opencode/agents/`), so `.pi/settings.json`, `.opencode/opencode.json`, and any hand-authored Pi extensions/prompts remain available for tracking. If a project needs to track another file under `.claude/` or `.cursor/` (e.g., a hand-authored `.claude/commands/<name>.md`), add another `!<path>` line.
 
 ## Project Entry Points
 

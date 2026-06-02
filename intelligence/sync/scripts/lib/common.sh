@@ -252,6 +252,9 @@ get_model_default() {
         codex:heavy)      echo "gpt-5.5" ;;
         codex:standard)   echo "gpt-5.5-codex" ;;
         codex:light)      echo "gpt-5.5-mini" ;;
+        opencode:heavy)    echo "anthropic/claude-opus-4-20250514" ;;
+        opencode:standard) echo "anthropic/claude-sonnet-4-20250514" ;;
+        opencode:light)    echo "anthropic/claude-haiku-4-20250514" ;;
         *)                echo "" ;;
     esac
 }
