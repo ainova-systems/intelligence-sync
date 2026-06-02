@@ -111,7 +111,10 @@ sync_open_skill_dirs() {
     local output_dir="$3"
 
     if [ -d "$output_dir" ]; then
-        find "$output_dir" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+        # Prune both real subdirectories and symlinks (incl. dir-symlinks):
+        # "-type d" alone would leave a stale symlinked skill in place and
+        # break the "helper owns the full lifecycle" contract.
+        find "$output_dir" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -exec rm -rf {} +
     fi
     mkdir -p "$output_dir"
 
