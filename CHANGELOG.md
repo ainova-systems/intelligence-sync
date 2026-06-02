@@ -12,13 +12,20 @@ Update intelligence-sync: fetch the latest engine from https://github.com/ainova
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-06-02
+
 ### Added
 
 - Pi adapter (`pi.sh`) — reuses `AGENTS.md` for always-on rules, copies skills into the shared Agent Skills open-standard location (`.agents/skills/`), generates `.pi/prompts/intelligence-agent-*.md` prompt templates from source agents, and emits a small Pi extension (`.pi/extensions/intelligence-sync-rules.ts`) plus `.pi/intelligence-sync/rules/*.md` for path-scoped rules. This keeps Pi support additive and non-conflicting with existing Cursor/Copilot/Codex routing.
 - `sync_open_skill_dirs()` shared helper in `lib/common.sh` so Codex and Pi can write the same strict-YAML-safe skill copy without duplicating logic. The helper now owns the full lifecycle of its destination (clean per-skill subdirs + `mkdir -p` + populate), so adapters writing to a shared open-standard dir stay symmetric and future adapters cannot drift on cleanup semantics.
-- `sync.sh` AGENTS.md invariant extended to Pi — enabling `targets.pi` now also requires `targets.agents`, because Pi receives always-on project rules via `AGENTS.md`. The invariant loop carries an explicit "add new adapters here" comment for future contributors.
+- `sync.sh` AGENTS.md invariant extended to Pi and opencode — enabling `targets.pi` or `targets.opencode` now also requires `targets.agents`, because both adapters receive always-on project rules via `AGENTS.md`. The invariant loop carries an explicit "add new adapters here" comment for future contributors.
 - `docs/ADAPTERS.md` "Cleanup Contract" section codifying the three rules every adapter follows: clean only owned subpaths, use shared helpers for shared dirs, declare owned paths in `.gitignore`.
 - Docs and INIT guidance for Pi as an optional adapter, including project-safe `.gitignore` patterns that ignore only adapter-owned `.pi/` outputs while preserving `.pi/settings.json` and hand-authored Pi resources.
+- opencode adapter (`opencode.sh`) — reuses `AGENTS.md` for always-on rules (opencode reads it natively), copies skills into the shared Agent Skills open-standard location (`.agents/skills/`) via the existing `sync_open_skill_dirs()` helper, and emits opencode-native subagents under `.opencode/agents/<name>.md` with frontmatter (`description`, `mode: subagent`, `model`, `permission.edit`, `permission.bash`) derived from each source agent's `tier:` and `access:`. The adapter cleans only `.opencode/agents/` so user-managed `.opencode/opencode.json` and any other hand-authored config under `.opencode/` stay untouched. Path-scoped rules are not emitted (opencode has no first-class scoped-rule channel — users may opt in via `instructions:` globs in `opencode.json`).
+- `opencode:heavy/standard/light` model arms in `get_model_default()` mapping to the latest pinned non-deprecated Anthropic Claude IDs (`anthropic/claude-opus-4-8` / `anthropic/claude-sonnet-4-6` / `anthropic/claude-haiku-4-5-20251001`). Dateless 4.6+ IDs are pinned snapshots per Anthropic's [Models overview](https://docs.anthropic.com/en/docs/about-claude/models/overview), not evergreen pointers.
+- `strip_frontmatter()` shared helper in `lib/common.sh` so adapters that wrap source agent bodies (Pi, opencode) reuse one POSIX-awk parser instead of inlining identical blocks. Existing `pi_agent_body` is now a thin alias; opencode calls the shared helper directly. Reinforces the "all parsing in `common.sh`" convention.
+- `examples/go-api-with-opencode/` — minimal opencode example alongside `go-api-with-pi-and-codex`.
+- Docs and INIT guidance for opencode as an optional adapter, including project-safe `.gitignore` patterns that ignore only `.opencode/agents/` while preserving `.opencode/opencode.json`.
 
 ## [0.3.2] — 2026-05-22
 

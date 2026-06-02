@@ -46,19 +46,9 @@ pi_rule_paths() {
 }
 
 pi_agent_body() {
-    local file="$1"
-    awk '
-        BEGIN { in_fm = 0; past_fm = 0 }
-        { sub(/\r$/, "") }
-        /^---$/ {
-            if (!past_fm) {
-                in_fm = !in_fm
-                if (!in_fm) { past_fm = 1 }
-                next
-            }
-        }
-        past_fm { print }
-    ' "$file"
+    # Thin alias around the shared helper in lib/common.sh; kept so older call
+    # sites (and any future adapter logic) read symmetrically with sync_pi_*.
+    strip_frontmatter "$1"
 }
 
 sync_pi_rules() {
