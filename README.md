@@ -117,7 +117,7 @@ paths:
 | Rule without `paths:` (always-on) | copy as-is | skipped | skipped | skipped | skipped | skipped | **inlined as canonical** |
 | `tier:` | `model:` | `model:` | `model:` | `model:` | prompt template | `model:` | n/a |
 | `access:` | `tools:` | `readonly:` | `tools:` | `sandbox_mode:` | prompt guidance | `permission.edit`/`permission.bash` | n/a |
-| skills | SKILL.md | SKILL.md | SKILL.md | SKILL.md | SKILL.md via `.agents/skills/` | SKILL.md via `.agents/skills/` | listed |
+| skills | SKILL.md | SKILL.md | SKILL.md | SKILL.md | SKILL.md via `.agents/skills/` | SKILL.md via `.agents/skills/` + `/<name>` in `.opencode/commands/` | listed |
 | agents | transformed | transformed | `.agent.md` | `.toml` | `.pi/prompts/*.md` | `.opencode/agents/*.md` (subagent) | listed |
 
 Cursor, Copilot, Codex, Pi, and opencode all read AGENTS.md natively — always-on rules are inlined there once instead of being duplicated into each tool's native channel. Path-scoped rules stay in native per-tool channels where those exist; Pi gets a generated extension that lists scoped rules and tells the model to `read` them on demand. opencode has no first-class scoped-rule channel; users who need scoped rules can opt in via `instructions:` globs in `opencode.json`. Claude Code does not yet read AGENTS.md, so its adapter receives the full rule set.
