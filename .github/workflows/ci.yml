@@ -47,6 +47,26 @@ jobs:
           [ "$fail" -eq 0 ] && echo "OK: pure-modular, single source, no duplication"
           exit $fail
 
+      - name: Example fixtures must be stamped at the engine VERSION
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Examples are "ready-to-sync at the current engine" fixtures: the
+          # smoke job copies the fresh engine alongside them and expects
+          # IS_STATUS=ok. sync.sh fails closed when stamp < engine, so a bumped
+          # VERSION with an un-bumped example silently turns smoke into a
+          # confusing exit 6. Assert lockstep here for a precise early signal.
+          V="$(tr -d ' \t\r\n' < intelligence/sync/scripts/VERSION)"
+          fail=0
+          for cf in examples/*/config.yaml; do
+            stamp="$(awk -F'"' '/^sync_version:/ {print $2; exit}' "$cf")"
+            if [ "$stamp" != "$V" ]; then
+              echo "STAMP DRIFT: $cf has sync_version=\"$stamp\", expected \"$V\""; fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] && echo "OK: all examples stamped at $V"
+          exit $fail
+
   smoke:
     name: smoke (sync against examples)
     runs-on: ${{ matrix.os }}
