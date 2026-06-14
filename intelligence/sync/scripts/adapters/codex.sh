@@ -66,11 +66,11 @@ sync_codex_agents() {
                 past_fm { print }
             ' "$f")
 
-            # If the body contains the closing TOML triple-quote sequence,
-            # neutralize it by escaping the third quote — keeps the file
-            # parseable instead of bleeding raw markdown into the TOML grammar.
+            # Escape backslashes used in Markdown paths, then neutralize any
+            # closing TOML triple-quote sequence in the agent body.
             local body_safe
-            body_safe="${body//\"\"\"/\"\"\\\"}"
+            body_safe="${body//\\/\\\\}"
+            body_safe="${body_safe//\"\"\"/\"\"\\\"}"
 
             local name_escaped description_escaped
             name_escaped=$(toml_escape "$name")
