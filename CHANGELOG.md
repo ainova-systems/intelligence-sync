@@ -12,6 +12,11 @@ Update intelligence-sync: fetch the latest engine from https://github.com/ainova
 
 ## [Unreleased]
 
+### Changed
+
+- First-time setup is now agent-driven. The `README.md` Quick Start is a single copy-paste prompt that hands the AI assistant the upstream URL and lets it clone the engine, copy `intelligence/` into the project, run `INIT.md`, and sync — no manual `git clone`/`cp` step. The old three-step manual flow (and the redundant raw-`INIT.md` URL variant) are removed; one path only.
+- `INIT.md` is self-bootstrapping. A new top-of-file **Bootstrap** section installs the engine (clone upstream + copy `intelligence/`) when the file is read remotely and `intelligence/sync/scripts/sync.sh` isn't present yet, so pointing an agent at the raw `INIT.md` URL is a valid entry point. The Pre-check's missing-files branch now routes back to **Bootstrap** instead of telling the user to copy files by hand.
+
 ## [0.4.2] — 2026-06-05
 
 ### Added

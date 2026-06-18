@@ -4,6 +4,26 @@ The sync engine is already installed in this directory's `scripts/` subfolder. Y
 
 **Execute phases sequentially. Do not skip or combine phases. Each phase has a gate — wait for it before proceeding.**
 
+## Bootstrap: install the engine if it isn't here yet
+
+You can reach this file two ways:
+
+- **Already vendored in the project** (`intelligence/sync/INIT.md`) — the engine is installed. Skip straight to *Phase 0* below.
+- **Fetched remotely** (a raw GitHub URL) — the engine is **not** installed yet. Install it first, then continue:
+
+1. Check whether `intelligence/sync/scripts/sync.sh` exists at the project root. If it does, the engine is already installed — skip the rest of this section.
+2. If it does not, clone upstream into a temp directory and copy the `intelligence/` folder into the project root (never clone into the project tree itself). Adapt the temp path to the platform:
+
+   ```bash
+   tmp="$(mktemp -d)"
+   git clone --depth=1 https://github.com/ainova-systems/intelligence-sync.git "$tmp"
+   cp -r "$tmp/intelligence" ./intelligence
+   rm -rf "$tmp"
+   ```
+
+   If the project already has an umbrella folder holding a `config.yaml` under a different name (see *Phase 0*), copy the `sync/` module into that existing folder instead of creating a second `intelligence/`.
+3. From here on, work against the freshly copied, version-matched `intelligence/sync/INIT.md` and the rest of this document — that copy is authoritative.
+
 ## Phase 0: detect the source folder name
 
 This document is read by an AI agent and contains many literal references to `intelligence/` (lowercase). The folder you are reading from may have been **renamed** by the user (e.g. `Intelligence/`, `prompts/`, a project codename). Before doing anything else:
@@ -36,7 +56,7 @@ Before starting, verify:
    - **Partially initialized** = either exists but not both
    - **Fresh** = neither exists
 
-If files from steps 1-3 are missing, tell the user to copy the `intelligence/` directory from the intelligence-sync repository first. Do not proceed.
+If files from steps 1-3 are missing, the engine isn't installed yet — go back to **Bootstrap** above and install it (clone upstream, copy `intelligence/` in), then re-run this Pre-check. Do not proceed to Phase 1 until they exist.
 
 ### Already initialized → offer sync-only path
 

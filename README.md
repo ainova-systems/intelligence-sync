@@ -49,28 +49,18 @@ Zero dependencies. Just bash + awk. Linux, macOS, Windows (Git Bash / WSL).
 
 ## Quick Start
 
-### 1. Copy `intelligence/` to your project
-
-```bash
-git clone https://github.com/ainova-systems/intelligence-sync.git
-cp -r intelligence-sync/intelligence/ my-project/intelligence/
-```
-
-### 2. Bootstrap with your AI assistant
-
-Copy and paste this prompt into Claude Code, Cursor, or any AI coding assistant:
+From inside your project, paste this prompt into Claude Code, Cursor, or any AI coding assistant:
 
 ```
-Read intelligence/sync/INIT.md and follow it to bootstrap rules, agents, and skills for this project.
+Set up intelligence-sync in this repository from https://github.com/ainova-systems/intelligence-sync:
+clone it into a temp directory, copy its `intelligence/` folder into my project root, then read
+`intelligence/sync/INIT.md` and follow it to bootstrap rules, agents, and skills. Finish by running
+`bash intelligence/sync/scripts/sync.sh`.
 ```
 
-### 3. Run sync
-
-```bash
-bash intelligence/sync/scripts/sync.sh
-```
-
-Or use the `/intelligence-sync` skill directly in your AI coding assistant.
+The assistant clones the engine, copies it in, interviews you about your stack, generates
+`intelligence/rules`, `intelligence/agents`, and `intelligence/skills`, and runs the first sync —
+you never run a `git clone` or `cp` yourself.
 
 ### Upgrading
 
