@@ -12,6 +12,10 @@ Update intelligence-sync: fetch the latest engine from https://github.com/ainova
 
 ## [Unreleased]
 
+### Added
+
+- **Remote git sources.** A `sources.{rules,agents,skills}` entry in `config.yaml` may now be a remote git spec — `git+<url>[@<ref>][#<subpath>]` — alongside local paths. `sync` shallow-clones it on the fly (fresh every run, into a run-scoped temp dir removed on exit) and feeds the resolved directory through the exact same pipeline as a local source, so a team can keep shared intelligence in one repo and pull it into many projects. All adapters and the lint pass route source entries through the new `resolve_source_dir()` helper in `lib/common.sh` — the single point that detects and materializes remote sources, so no adapter needs to know about git. `<url>` must carry an explicit scheme (`https`/`http`/`ssh`/`git`/`file`); the command-executing `ext::`/`fd::` transports are rejected. `@<ref>` pins a tag/branch/SHA (recommended for supply-chain safety); `#<subpath>` selects a directory inside the clone. Within one sync the same `repo@ref` is cloned only once even when several entries reference different subpaths of it; each new sync re-pulls. Clone failures (offline, bad URL, missing subpath, missing credential — git runs with `GIT_TERMINAL_PROMPT=0` so it never hangs) warn on stderr and skip just that source; local sources still sync and the run still reports `IS_STATUS=ok`. Documented in `docs/CONVENTIONS.md` ("Remote sources (git)"); `examples/with-remote-skills/` shows the config. No migration — purely additive, existing local-only configs are unaffected.
+
 ### Changed
 
 - First-time setup is now agent-driven. The `README.md` Quick Start is a single copy-paste prompt that hands the AI assistant the upstream URL and lets it clone the engine, copy `intelligence/` into the project, run `INIT.md`, and sync — no manual `git clone`/`cp` step. The old three-step manual flow (and the redundant raw-`INIT.md` URL variant) are removed; one path only.

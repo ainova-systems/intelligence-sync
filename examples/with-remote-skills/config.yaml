@@ -1,0 +1,38 @@
+# Example: pulling shared skills/rules from a remote git repo
+# A `sources.*` entry may be a remote `git+<url>[@ref][#subpath]` spec instead
+# of a local path. sync shallow-clones it (fresh each run) and treats the
+# resolved directory exactly like a local source. Pin to a tag or SHA so an
+# upstream change can't silently alter your agents — see docs/CONVENTIONS.md
+# "Remote sources (git)". Paths/URLs here are EXAMPLES — use your own.
+
+project:
+  name: my-app
+
+sync_version: "0.4.2"
+
+sources:
+  rules:
+    - "intelligence/rules"
+    # Shared rules from a central repo, pinned to a tag:
+    - "git+https://github.com/org/shared-intel.git@v1.2.0#rules"
+  agents:
+    - "intelligence/agents"
+  skills:
+    - "intelligence/skills"
+    - "intelligence/sync/skills"
+    # Shared skills from the same repo @ the same tag — cloned once per sync,
+    # reused for the rules entry above (same repo@ref):
+    - "git+https://github.com/org/shared-intel.git@v1.2.0#skills"
+
+targets:
+  agents:
+    enabled: true
+    output: "AGENTS.md"
+    header: |
+      # My App
+
+      Service with shared, centrally-managed intelligence pulled from git.
+
+      **Full context**: [`intelligence/rules/context.md`](intelligence/rules/context.md)
+  claude: { enabled: true, output: ".claude" }
+  cursor: { enabled: true, output: ".cursor" }

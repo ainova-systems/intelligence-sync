@@ -181,6 +181,93 @@ jobs:
             test -f "$PROJ/.agents/skills/backend-add-endpoint/SKILL.md"
           fi
 
+  remote-sources:
+    name: remote-sources (git+ sources, hermetic file://)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Remote git source is cloned once per repo@ref and synced
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # A local "shared intelligence" git repo — no network involved.
+          SHARED=$RUNNER_TEMP/shared-intel
+          mkdir -p "$SHARED/shared/skills/demo-skill" "$SHARED/shared/rules"
+          cat > "$SHARED/shared/skills/demo-skill/SKILL.md" <<'EOF'
+          ---
+          name: demo-skill
+          description: "Remote demo skill pulled from git"
+          ---
+          # Demo skill
+          Steps from the shared repo.
+          EOF
+          cat > "$SHARED/shared/rules/demo-rule.md" <<'EOF'
+          # Shared remote rule
+          REMOTE_RULE_MARKER always-on guidance from the shared repo.
+          EOF
+          git -C "$SHARED" init -q
+          git -C "$SHARED" add -A
+          git -C "$SHARED" -c user.email=ci@example.com -c user.name=ci commit -q -m shared
+          URL="file://$SHARED"
+
+          # A project that references that repo via TWO subpaths (rules + skills)
+          # of the SAME repo@ref, plus a forbidden ext:: transport.
+          V="$(tr -d ' \t\r\n' < intelligence/sync/scripts/VERSION)"
+          PROJ=$RUNNER_TEMP/proj
+          mkdir -p "$PROJ/intelligence/rules" "$PROJ/intelligence/agents" "$PROJ/intelligence/skills"
+          cp -r intelligence/sync "$PROJ/intelligence/sync"
+          printf '# Local context\nLocal always-on standards.\n' > "$PROJ/intelligence/rules/context.md"
+          cat > "$PROJ/intelligence/config.yaml" <<EOF
+          project:
+            name: remote-demo
+          sync_version: "$V"
+          sources:
+            rules:
+              - "intelligence/rules"
+              - "git+$URL#shared/rules"
+            agents:
+              - "intelligence/agents"
+            skills:
+              - "intelligence/skills"
+              - "git+$URL#shared/skills"
+              - "git+ext::FAKE#x"
+          targets:
+            agents:
+              enabled: true
+              output: "AGENTS.md"
+              header: |
+                # Remote demo
+            claude: { enabled: true, output: ".claude" }
+          EOF
+          git -C "$PROJ" init -q
+          git -C "$PROJ" add -A
+          git -C "$PROJ" -c user.email=ci@example.com -c user.name=ci commit -q -m init
+
+          cd "$PROJ"
+          out=$(bash intelligence/sync/scripts/sync.sh 2>&1)
+          echo "$out"
+          echo "$out" | grep -q 'IS_STATUS=ok' || { echo "missing IS_STATUS=ok"; exit 1; }
+
+          # Same repo@ref (two subpaths) is cloned EXACTLY once.
+          n=$(printf '%s\n' "$out" | grep -c 'remote: cloned') || true
+          [ "$n" -eq 1 ] || { echo "expected 1 clone, got $n"; exit 1; }
+
+          # ext:: transport is refused (never reaches git); sync still succeeds.
+          echo "$out" | grep -q 'rejected (unsupported scheme)' || { echo "ext:: not rejected"; exit 1; }
+
+          # Remote skill + remote (always-on) rule materialized into outputs.
+          test -f .claude/skills/demo-skill/SKILL.md
+          test -f .claude/rules/demo-rule.md
+          grep -q 'demo-skill' AGENTS.md
+          grep -q 'REMOTE_RULE_MARKER' AGENTS.md
+
+          # Run-scoped clone cache is removed on exit (no leftover temp dirs).
+          if find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'intelligence-sync-remotes-*' 2>/dev/null | grep -q .; then
+            echo "temp clone cache not cleaned up"; exit 1
+          fi
+          echo "OK: remote git sources cloned once, synced, ext:: refused, cache cleaned"
+
   migration:
     name: migration (legacy -> sync, idempotent, fail-closed)
     runs-on: ubuntu-latest

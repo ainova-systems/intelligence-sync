@@ -120,12 +120,20 @@ if [ -z "$TARGET_FILTER" ]; then
     fi
 fi
 
+# Remote sources (git+<url> specs in sources.*) are shallow-cloned on demand by
+# resolve_source_dir. Give it a run-scoped cache dir so each spec is fetched at
+# most once per sync and is removed on exit. Honors $TMPDIR (never hardcodes
+# /tmp), mirroring update.sh.
+IS_REMOTE_CACHE="$(mktemp -d -t intelligence-sync-remotes-XXXXXX 2>/dev/null || mktemp -d)"
+export IS_REMOTE_CACHE
+trap 'rm -rf "$IS_REMOTE_CACHE"' EXIT INT TERM
+
 # Lint frontmatter across all source files (rules, agents, skills).
 # Catches issues like unquoted colons that strict YAML consumers reject.
 for section in rules agents skills; do
     while IFS= read -r src; do
         [ -z "$src" ] && continue
-        src_dir="$REPO_ROOT/$src"
+        src_dir="$(resolve_source_dir "$REPO_ROOT" "$src")"
         [ -d "$src_dir" ] || continue
         if [ "$section" = "skills" ]; then
             while IFS= read -r f; do

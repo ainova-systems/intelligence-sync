@@ -43,6 +43,33 @@ Everything project-authored lives at the umbrella level (`rules/ agents/ skills/
 
 Rule filenames, agent names, and skill names all share the same **domain prefix** (`backend-`, `frontend-`, `devops-`, `core-`, `tests-`, project codename, or monorepo component name). Pick the domain once from repo structure and reuse it — do not invent new domains without clear need.
 
+### Remote sources (git)
+
+A `sources.{rules,agents,skills}` entry is normally a **local path** relative to the repo root. It may instead be a **remote git spec**, which `sync` shallow-clones on the fly and treats exactly like a local source directory — so a team can keep shared intelligence in one repo and pull it into many projects:
+
+```yaml
+sources:
+  skills:
+    - "intelligence/skills"                                       # local
+    - "git+https://github.com/org/shared-intel.git@v1.2.0#skills"  # remote, pinned tag
+  rules:
+    - "intelligence/rules"
+    - "git+ssh://git@github.com/org/shared-intel.git@main#rules"   # remote, branch
+```
+
+Spec format: `git+<url>[@<ref>][#<subpath>]`
+
+- `<url>` — must carry an explicit scheme: `https://`, `http://`, `ssh://`, `git://`, or `file://`. Other transports (notably the command-executing `ext::` / `fd::`) are **rejected** with a warning and skipped.
+- `@<ref>` — optional tag, branch, or commit SHA. Parsed as the segment after the last `@`, accepted as a ref only when it contains no `/` (so `ssh://git@host/...` userinfo is not mistaken for a ref). Branch names containing `/` (e.g. `feature/x`) can't be expressed this way — use a tag, SHA, or slashless branch (pinning is recommended regardless).
+- `#<subpath>` — optional directory inside the cloned repo holding the rules / agents / skills. Omit to use the repo root.
+
+Behavior and trust:
+
+- **Fresh every sync.** Each `sync` run clones into a run-scoped temp dir and removes it on exit, so branch refs always pick up the latest. Within one run the same `repo@ref` is cloned only once, even when several entries (different `#subpath`s) reference it.
+- **Reproducibility / supply chain.** A remote's content becomes rules, agents, and skills the LLM reads as project context. Pin to a tag or SHA so an upstream change can't silently alter behavior, and only reference repos you trust.
+- **Private repos** rely on ambient credentials (an SSH agent or git credential helper). `sync` runs git with `GIT_TERMINAL_PROMPT=0`, so a missing credential fails fast with a warning instead of hanging; local sources still sync.
+- **Best-effort.** A clone failure (offline, bad URL, missing subpath) warns on stderr and skips that one source — the rest of the sync proceeds and still reports `IS_STATUS=ok`.
+
 ## Agent Frontmatter
 
 ```yaml

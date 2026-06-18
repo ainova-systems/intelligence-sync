@@ -16,7 +16,8 @@ sync_claude_rules() {
 
     while IFS= read -r src; do
         [ -z "$src" ] && continue
-        local dir="$repo_root/$src"
+        local dir
+        dir="$(resolve_source_dir "$repo_root" "$src")"
         [ -d "$dir" ] || continue
         for f in "$dir"/*.md; do
             [ -f "$f" ] || continue
@@ -35,7 +36,8 @@ sync_claude_skills() {
 
     while IFS= read -r src; do
         [ -z "$src" ] && continue
-        local dir="$repo_root/$src"
+        local dir
+        dir="$(resolve_source_dir "$repo_root" "$src")"
         [ -d "$dir" ] || continue
         for d in "$dir"/*/; do
             [ -d "$d" ] || continue
@@ -95,7 +97,8 @@ sync_claude_agents() {
 
     while IFS= read -r src; do
         [ -z "$src" ] && continue
-        local dir="$repo_root/$src"
+        local dir
+        dir="$(resolve_source_dir "$repo_root" "$src")"
         [ -d "$dir" ] || continue
         for f in "$dir"/*.md; do
             [ -f "$f" ] || continue
