@@ -41,7 +41,8 @@ agents_md_append_agents_table() {
 
     while IFS= read -r src; do
         [ -z "$src" ] && continue
-        local dir="$repo_root/$src"
+        local dir
+        dir="$(resolve_source_dir "$repo_root" "$src")"
         [ -d "$dir" ] || continue
         for f in "$dir"/*.md; do
             [ -f "$f" ] || continue
@@ -80,7 +81,8 @@ agents_md_append_skills_table() {
 
     while IFS= read -r src; do
         [ -z "$src" ] && continue
-        local dir="$repo_root/$src"
+        local dir
+        dir="$(resolve_source_dir "$repo_root" "$src")"
         [ -d "$dir" ] || continue
         for skill_dir in "$dir"/*/; do
             [ -d "$skill_dir" ] || continue
@@ -122,7 +124,8 @@ agents_md_append_rules_list() {
 
     while IFS= read -r src; do
         [ -z "$src" ] && continue
-        local dir="$repo_root/$src"
+        local dir
+        dir="$(resolve_source_dir "$repo_root" "$src")"
         [ -d "$dir" ] || continue
         for f in "$dir"/*.md; do
             [ -f "$f" ] || continue

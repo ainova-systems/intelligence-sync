@@ -47,6 +47,8 @@ Source `lib/common.sh` for these utilities:
 | `map_access_to_claude_tools(access)` | Tool string for access level |
 | `map_access_to_claude_disallowed(access)` | Disallowed tools string |
 | `read_yaml_list(config, section)` | Read list from `config.yaml` |
+| `resolve_source_dir(repo_root, src)` | Map a source entry to a local dir — `"$repo_root/$src"`, or a shallow clone for a remote `git+<url>` spec |
+| `source_is_remote(src)` | True (0) if a source entry is a remote `git+` spec |
 | `get_target_field(config, target, field)` | Read a field from a target's config block |
 
 ### Transformation Patterns
@@ -108,7 +110,10 @@ sync_to_myide() {
     # Copy rules, strip frontmatter
     while IFS= read -r src; do
         [ -z "$src" ] && continue
-        local dir="$repo_root/$src"
+        # resolve_source_dir maps a source entry to a local dir: "$repo_root/$src"
+        # for a local path, or a shallow clone for a remote `git+<url>` spec.
+        local dir
+        dir="$(resolve_source_dir "$repo_root" "$src")"
         [ -d "$dir" ] || continue
         for f in "$dir"/*.md; do
             [ -f "$f" ] || continue
