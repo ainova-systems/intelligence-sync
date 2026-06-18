@@ -206,6 +206,8 @@ jobs:
           # Shared remote rule
           REMOTE_RULE_MARKER always-on guidance from the shared repo.
           EOF
+          # A hostile symlink in the remote repo, pointing at a host file.
+          ln -s /etc/hosts "$SHARED/shared/rules/evil.md"
           git -C "$SHARED" init -q
           git -C "$SHARED" add -A
           git -C "$SHARED" -c user.email=ci@example.com -c user.name=ci commit -q -m shared
@@ -232,6 +234,7 @@ jobs:
               - "intelligence/skills"
               - "git+$URL#shared/skills"
               - "git+ext::FAKE#x"
+              - "git+$URL#../../etc"
           targets:
             agents:
               enabled: true
@@ -255,6 +258,15 @@ jobs:
 
           # ext:: transport is refused (never reaches git); sync still succeeds.
           echo "$out" | grep -q 'rejected (unsupported scheme)' || { echo "ext:: not rejected"; exit 1; }
+
+          # `..` traversal in #subpath is refused before any escape.
+          echo "$out" | grep -q 'subpath traversal' || { echo "traversal not rejected"; exit 1; }
+
+          # A hostile symlink in the remote repo must not leak host files —
+          # core.symlinks=false checks it out as an inert text file.
+          if [ -f .claude/rules/evil.md ] && grep -qiE 'localhost|127\.0\.0\.1' .claude/rules/evil.md; then
+            echo "host file leaked via remote symlink"; exit 1
+          fi
 
           # Remote skill + remote (always-on) rule materialized into outputs.
           test -f .claude/skills/demo-skill/SKILL.md

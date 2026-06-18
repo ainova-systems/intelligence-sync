@@ -67,6 +67,7 @@ Behavior and trust:
 
 - **Fresh every sync.** Each `sync` run clones into a run-scoped temp dir and removes it on exit, so branch refs always pick up the latest. Within one run the same `repo@ref` is cloned only once, even when several entries (different `#subpath`s) reference it.
 - **Reproducibility / supply chain.** A remote's content becomes rules, agents, and skills the LLM reads as project context. Pin to a tag or SHA so an upstream change can't silently alter behavior, and only reference repos you trust.
+- **Containment.** The clone can't be made to read outside itself: `..` in `#subpath` is refused, remote repos are checked out with `core.symlinks=false` (a hostile `skills -> /etc` link becomes an inert text file, not a path the copy step follows), and the resolved directory is verified to sit inside the clone.
 - **Private repos** rely on ambient credentials (an SSH agent or git credential helper). `sync` runs git with `GIT_TERMINAL_PROMPT=0`, so a missing credential fails fast with a warning instead of hanging; local sources still sync.
 - **Best-effort.** A clone failure (offline, bad URL, missing subpath) warns on stderr and skips that one source — the rest of the sync proceeds and still reports `IS_STATUS=ok`.
 

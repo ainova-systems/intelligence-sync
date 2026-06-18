@@ -87,6 +87,15 @@ resolve_source_dir() {
         *\#*) subpath="${rest#*#}"; urlref="${rest%%#*}" ;;
     esac
 
+    # Reject path traversal in the subpath: a remote spec must not be able to
+    # escape the clone dir (e.g. `#../../etc`). Checked before any clone.
+    case "/$subpath/" in
+        */../*)
+            echo "  WARN: remote source rejected (subpath traversal '..'): $token" >&2
+            return 0
+            ;;
+    esac
+
     # Scheme whitelist — reject everything but plain fetch transports. The
     # ext::/fd:: transports execute arbitrary commands on clone, so a malicious
     # or mistyped config must never reach `git clone` with them.
@@ -130,20 +139,24 @@ resolve_source_dir() {
 
     if [ ! -d "$dest/.git" ]; then
         rm -rf "$dest"
+        # Untrusted remote content: never materialize symlinks from the cloned
+        # repo. With core.symlinks=false git writes each symlink as a plain text
+        # file holding its target path, so a hostile link like `skills -> /etc`
+        # cannot make the copy pipeline read host files outside the clone.
         local ok=0
         if [ -n "$ref" ]; then
-            if GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch "$ref" --quiet \
+            if GIT_TERMINAL_PROMPT=0 git -c core.symlinks=false clone --depth 1 --branch "$ref" --quiet \
                 "$url" "$dest" 2>/dev/null; then
                 ok=1
             else
                 # ref is likely a SHA (not a branch/tag) — full clone + checkout.
                 rm -rf "$dest"
-                if GIT_TERMINAL_PROMPT=0 git clone --quiet "$url" "$dest" 2>/dev/null \
-                    && git -C "$dest" checkout --quiet "$ref" 2>/dev/null; then
+                if GIT_TERMINAL_PROMPT=0 git -c core.symlinks=false clone --quiet "$url" "$dest" 2>/dev/null \
+                    && git -C "$dest" -c core.symlinks=false checkout --quiet "$ref" 2>/dev/null; then
                     ok=1
                 fi
             fi
-        elif GIT_TERMINAL_PROMPT=0 git clone --depth 1 --quiet "$url" "$dest" 2>/dev/null; then
+        elif GIT_TERMINAL_PROMPT=0 git -c core.symlinks=false clone --depth 1 --quiet "$url" "$dest" 2>/dev/null; then
             ok=1
         fi
         if [ "$ok" -ne 1 ]; then
@@ -160,6 +173,20 @@ resolve_source_dir() {
         echo "  WARN: remote source subpath not found ('${subpath:-/}') in $url: $token" >&2
         return 0
     fi
+    # Containment (defense in depth on top of the `..` reject + symlink-free
+    # checkout): the resolved dir must stay inside the clone. Canonicalize both
+    # with `pwd -P` so a symlinked TMPDIR (e.g. macOS /tmp -> /private/tmp)
+    # resolves consistently on each side.
+    local real_dest real_out
+    real_dest="$(cd "$dest" 2>/dev/null && pwd -P)"
+    real_out="$(cd "$out" 2>/dev/null && pwd -P)"
+    case "${real_out:-/nonexistent}" in
+        "$real_dest"|"$real_dest"/*) ;;
+        *)
+            echo "  WARN: remote source subpath escapes the clone ('${subpath:-/}'): $token" >&2
+            return 0
+            ;;
+    esac
     printf '%s' "$out"
     return 0
 }
