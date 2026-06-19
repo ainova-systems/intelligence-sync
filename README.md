@@ -47,6 +47,10 @@ Skills follow the [Agent Skills open standard](https://agentskills.io). Rules an
 
 Zero dependencies. Just bash + awk. Linux, macOS, Windows (Git Bash / WSL).
 
+## Ready-made packs
+
+[intelligence-dev-packs](https://github.com/ainova-systems/intelligence-dev-packs) is a set of shared AI-first engineering packs - git/PR/review discipline plus an optional spec-driven development lifecycle - that you consume straight through this engine as remote `git+` sources, instead of authoring every rule and skill from scratch. Extracted from production AI-coded systems.
+
 ## Quick Start
 
 From inside your project, paste this prompt into Claude Code, Cursor, or any AI coding assistant:
