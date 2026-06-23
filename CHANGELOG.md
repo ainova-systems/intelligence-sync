@@ -12,6 +12,8 @@ Update intelligence-sync: fetch the latest engine from https://github.com/ainova
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-23
+
 ### Added
 
 - **Remote git sources.** A `sources.{rules,agents,skills}` entry in `config.yaml` may now be a remote git spec — `git+<url>[@<ref>][#<subpath>]` — alongside local paths. `sync` shallow-clones it on the fly (fresh every run, into a run-scoped temp dir removed on exit) and feeds the resolved directory through the exact same pipeline as a local source, so a team can keep shared intelligence in one repo and pull it into many projects. All adapters and the lint pass route source entries through the new `resolve_source_dir()` helper in `lib/common.sh` — the single point that detects and materializes remote sources, so no adapter needs to know about git. `<url>` must carry an explicit scheme (`https`/`http`/`ssh`/`git`/`file`); the command-executing `ext::`/`fd::` transports are rejected, `..` traversal in `#subpath` is refused, remote repos are cloned with `core.symlinks=false`, and the resolved directory is verified to stay inside the clone — so untrusted remote content can't make the copy step read host files. `@<ref>` pins a tag/branch/SHA (recommended for supply-chain safety); `#<subpath>` selects a directory inside the clone. Within one sync the same `repo@ref` is cloned only once even when several entries reference different subpaths of it; each new sync re-pulls. Clone failures (offline, bad URL, missing subpath, missing credential — git runs with `GIT_TERMINAL_PROMPT=0` so it never hangs) warn on stderr and skip just that source; local sources still sync and the run still reports `IS_STATUS=ok`. Documented in `docs/CONVENTIONS.md` ("Remote sources (git)"); `examples/with-remote-skills/` shows the config. No migration — purely additive, existing local-only configs are unaffected.
@@ -20,6 +22,10 @@ Update intelligence-sync: fetch the latest engine from https://github.com/ainova
 
 - First-time setup is now agent-driven. The `README.md` Quick Start is a single copy-paste prompt that hands the AI assistant the upstream URL and lets it clone the engine, copy `intelligence/` into the project, run `INIT.md`, and sync — no manual `git clone`/`cp` step. The old three-step manual flow (and the redundant raw-`INIT.md` URL variant) are removed; one path only.
 - `INIT.md` is self-bootstrapping. A new top-of-file **Bootstrap** section installs the engine (clone upstream + copy `intelligence/`) when the file is read remotely and `intelligence/sync/scripts/sync.sh` isn't present yet, so pointing an agent at the raw `INIT.md` URL is a valid entry point. The Pre-check's missing-files branch now routes back to **Bootstrap** instead of telling the user to copy files by hand.
+
+### Fixed
+
+- **`AGENTS.md` no longer embeds remote-clone temp paths.** A remote `sources.*` git spec is materialized in a run-scoped clone cache outside the repo. The `agents` adapter built each link target with a `${path#"$repo_root"/}` strip that is a no-op for those out-of-repo paths, so the committed `AGENTS.md` got machine-specific, ephemeral `…/intelligence-sync-remotes-XXXX/…` links that changed on every run. A new `repo_rel_link()` helper in `lib/common.sh` returns empty for any file outside the repo root, so remote-pack agents/skills/rules are now listed by name (no link) while local items keep their repo-relative link. A post-generation guard fails the sync loudly if an absolute link target ever reaches `AGENTS.md`, so the leak can never be committed silently again. The `pi` adapter's `Source:` line got the same fix.
 
 ## [0.4.2] — 2026-06-05
 
