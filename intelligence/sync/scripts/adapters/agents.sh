@@ -44,7 +44,10 @@ agents_md_append_agents_table() {
         local dir
         dir="$(resolve_source_dir "$repo_root" "$src")"
         [ -d "$dir" ] || continue
-        for f in "$dir"/*.md; do
+        # Byte-order (LC_ALL=C) sort so generated output is identical across
+        # platforms — bash glob order follows LC_COLLATE, which differs between
+        # Linux CI (UTF-8, ignores `-`) and Git Bash (C, byte order).
+        while IFS= read -r f; do
             [ -f "$f" ] || continue
             local name rel tier access desc
             name="$(basename "$f" .md)"
@@ -58,7 +61,7 @@ agents_md_append_agents_table() {
                 rows+="| $name | ${tier:--} | ${access:--} | ${desc:--} |"$'\n'
             fi
             count=$((count + 1))
-        done
+        done < <(find "$dir" -maxdepth 1 -type f -name '*.md' -print | LC_ALL=C sort)
     done < <(read_yaml_list "$config_file" "agents")
 
     [ "$count" -eq 0 ] && return 0
@@ -88,7 +91,9 @@ agents_md_append_skills_table() {
         local dir
         dir="$(resolve_source_dir "$repo_root" "$src")"
         [ -d "$dir" ] || continue
-        for skill_dir in "$dir"/*/; do
+        # Byte-order (LC_ALL=C) sort so generated output is identical across
+        # platforms — see the note in agents_md_append_agents_table.
+        while IFS= read -r skill_dir; do
             [ -d "$skill_dir" ] || continue
             local dirname
             dirname="$(basename "$skill_dir")"
@@ -104,7 +109,7 @@ agents_md_append_skills_table() {
                 rows+="| $dirname | ${desc:--} |"$'\n'
             fi
             count=$((count + 1))
-        done
+        done < <(find "$dir" -mindepth 1 -maxdepth 1 -type d -print | LC_ALL=C sort)
     done < <(read_yaml_list "$config_file" "skills")
 
     [ "$count" -eq 0 ] && return 0
@@ -135,7 +140,10 @@ agents_md_append_rules_list() {
         local dir
         dir="$(resolve_source_dir "$repo_root" "$src")"
         [ -d "$dir" ] || continue
-        for f in "$dir"/*.md; do
+        # Byte-order (LC_ALL=C) sort so generated output — and the inline order
+        # of always-on rules below — is identical across platforms. See the
+        # note in agents_md_append_agents_table.
+        while IFS= read -r f; do
             [ -f "$f" ] || continue
             local name rel scope
             name="$(basename "$f" .md)"
@@ -152,7 +160,7 @@ agents_md_append_rules_list() {
                 lines+="- $name ($scope)"$'\n'
             fi
             count=$((count + 1))
-        done
+        done < <(find "$dir" -maxdepth 1 -type f -name '*.md' -print | LC_ALL=C sort)
     done < <(read_yaml_list "$config_file" "rules")
 
     [ "$count" -eq 0 ] && return 0

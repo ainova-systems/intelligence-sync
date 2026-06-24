@@ -12,6 +12,12 @@ Update intelligence-sync: fetch the latest engine from https://github.com/ainova
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-06-24
+
+### Fixed
+
+- **`AGENTS.md` ordering is now platform-independent.** The `agents` adapter listed skills, agents, and rules in bash glob order, which follows the locale's `LC_COLLATE`: Linux CI (`en_US.UTF-8`) ignores `-` in the primary weight and sorted `backend-add-commands` before `backend-add-command-subscriber`, while Git Bash (`C` locale) uses byte order and sorted them the other way. The same project therefore produced a different `AGENTS.md` depending on which machine ran `sync`, yielding spurious diffs. The three list-building loops in `agents.sh` now feed `find … -print | LC_ALL=C sort`, pinning output to byte order on every platform (this also makes the inline order of always-on rules inlined into `AGENTS.md` deterministic). No schema migration — the stamp advances to `0.5.1` on update like any release, but `config.yaml`, `rules/`, `agents/`, and `skills/` content is untouched. Re-run sync afterwards to regenerate `AGENTS.md` in the now-stable order.
+
 ## [0.5.0] — 2026-06-23
 
 ### Added
