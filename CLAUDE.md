@@ -58,6 +58,33 @@ There is no build step and no test framework. Correctness is verified by the CI 
 
 When editing the `intelligence-*` skills or any rule/agent, follow `docs/CONVENTIONS.md`: rule = constraint the LLM respects (auto-loaded), skill = procedure the LLM performs (explicit `/name`), agent = persona the LLM adopts. Names are `<domain>-<verb>-<noun>`; `description` fields share a global token budget (keep short — 4–8 words if unique, ≤250 chars with a distinguishing trigger if there are siblings). Update `CHANGELOG.md` for user-facing changes.
 
+## Releasing
+
+A version bump is **not released** until a git tag *and* a matching GitHub release exist — generating the tarball/release is the final, mandatory step, not optional polish. Releases are cut **directly on `main`** (house style — see `… released the fix as 0.5.0` in history; no release branch, no PR). SemVer: **patch** = fix only, **minor** = additive/back-compatible, **major/minor with a migration** = a `migrate_to_<v>` in `lib/migrations.sh` + a `### Breaking` subsection in `CHANGELOG.md`.
+
+The engine version lives in `intelligence/sync/scripts/VERSION` and is **lockstep** with the `sync_version` stamp: `sync.sh` fails closed (`needs-update`) when its `VERSION` is newer than a project's `sync_version`, and CI (`repo-purity` job) asserts every `examples/*/config.yaml` is stamped at exactly `VERSION`. So every release bumps, in one commit, **all** of: `scripts/VERSION`, the `sync_version:` example in `intelligence/sync/INIT.md`, and `sync_version:` in **every** `examples/*/config.yaml`. Mismatch = red CI.
+
+Procedure (run from a clean `main`, working tree already holding the change):
+
+```bash
+# 1. Lockstep version bump (VERSION + INIT.md example + all examples/*/config.yaml)
+#    and a CHANGELOG.md [X.Y.Z] — <date> section (move items out of [Unreleased];
+#    breaking releases add a ### Breaking subsection with verifiable post-conditions).
+# 2. Verify lockstep locally (mirrors CI repo-purity):
+V=$(tr -d ' \t\r\n' < intelligence/sync/scripts/VERSION)
+for cf in examples/*/config.yaml; do
+  [ "$(awk -F'\"' '/^sync_version:/{print $2;exit}' "$cf")" = "$V" ] || echo "DRIFT: $cf"
+done
+# 3. Commit + push to main, then tag and publish the GitHub release:
+git commit -am "…released … as $V"        # one-sentence, past-tense message
+git push origin main
+git tag "v$V" && git push origin "v$V"     # tag convention is vX.Y.Z
+gh release create "v$V" --title "v$V" --notes-file <notes>   # notes mirror v0.5.0:
+#   one-paragraph description → ## Highlights (### Added/Changed/Fixed, condensed
+#   from the CHANGELOG section) → Full changelog link → ## Install. Latest release
+#   is what downstream `update.sh` pulls, so the release must point at the tagged commit.
+```
+
 ## Commit messages
 
 Capitalized, past tense, one sentence (e.g. `Added Codex adapter with AGENTS.md generation`) — matches existing history.
