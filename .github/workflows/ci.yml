@@ -124,6 +124,7 @@ jobs:
           ---
           name: backend-add-endpoint
           description: "Add an endpoint: handler + route + tests"
+          argument-hint: [route-name]
           ---
 
           # Add endpoint
@@ -158,6 +159,21 @@ jobs:
           grep -q "Use this for project-wide standards" "$PROJ/AGENTS.md"
           grep -q "backend-developer" "$PROJ/AGENTS.md"
           grep -q "backend-add-endpoint" "$PROJ/AGENTS.md"
+
+      - name: Skill frontmatter is quoted in every channel (argument-hint must be a string)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJ"
+          # `argument-hint: [route-name]` is a YAML flow SEQUENCE unquoted, and
+          # Claude Code rejects the skill outright ("argument-hint must be a
+          # string"). Every copy path must quote it, not just .agents/skills/.
+          for d in .claude/skills .cursor/skills .github/skills .agents/skills; do
+            f="$d/backend-add-endpoint/SKILL.md"
+            [ -f "$f" ] || continue
+            grep -q 'argument-hint: "\[route-name\]"' "$f"               || { echo "UNQUOTED argument-hint in $f:"; grep -n 'argument-hint' "$f"; exit 1; }
+            echo "  ok: $f"
+          done
 
       - name: Engine-owned rule + agent reach the outputs, with layout tokens expanded
         shell: bash
