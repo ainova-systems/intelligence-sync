@@ -630,3 +630,47 @@ jobs:
           else
             echo "OK: sync enforced agents-required invariant."
           fi
+
+      - name: A symlinked SKILL.md is never materialized into an output
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Every text pass in the engine (LF normalization, token expansion,
+          # frontmatter quoting) reads a file and writes it back. Run one of
+          # those through a symlink and the link's TARGET — a host file outside
+          # the repo — is copied into the generated skill. `cp -R` preserves
+          # symlinks precisely so that cannot happen; assert it stays true.
+          PROJ=$RUNNER_TEMP/symskill
+          SECRET=$RUNNER_TEMP/secret
+          mkdir -p "$PROJ/intelligence"/{rules,agents,skills/evil-skill} "$SECRET"
+          echo "TOP-SECRET-HOST-CONTENT" > "$SECRET/passwd"
+          cp -r intelligence/sync "$PROJ/intelligence/sync"
+          printf '# ctx\n' > "$PROJ/intelligence/rules/context.md"
+          ln -s "$SECRET/passwd" "$PROJ/intelligence/skills/evil-skill/SKILL.md"
+          cat > "$PROJ/intelligence/config.yaml" <<EOF
+          project:
+            name: symskill
+          sync_version: "$(tr -d ' \t\r\n' < intelligence/sync/scripts/VERSION)"
+          sources:
+            rules:
+              - "intelligence/rules"
+            agents:
+              - "intelligence/agents"
+            skills:
+              - "intelligence/skills"
+          targets:
+            agents: { enabled: true, output: "AGENTS.md" }
+            claude: { enabled: true, output: ".claude" }
+            codex: { enabled: true, output: ".codex" }
+          EOF
+          git -C "$PROJ" init -q
+          cd "$PROJ"
+          bash intelligence/sync/scripts/sync.sh > /dev/null 2>&1
+          if grep -rq "TOP-SECRET-HOST-CONTENT" .claude .agents AGENTS.md 2>/dev/null; then
+            echo "LEAK: host file content materialized into generated output:"
+            grep -rl "TOP-SECRET-HOST-CONTENT" .claude .agents AGENTS.md
+            exit 1
+          fi
+          test -L .claude/skills/evil-skill/SKILL.md \
+            || { echo "FAIL: symlinked SKILL.md was replaced by a real file"; exit 1; }
+          echo "OK: symlinked SKILL.md left as a symlink; no host content in outputs"

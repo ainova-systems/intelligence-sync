@@ -361,7 +361,15 @@ copy_skill_bundle() {
     local dest_dir="$2"
     mkdir -p "$dest_dir"
     cp -R "$src_dir/." "$dest_dir/"
-    if [ -f "$dest_dir/SKILL.md" ]; then
+    # A symlinked SKILL.md is left exactly as `cp -R` produced it — a symlink.
+    # `[ -f ]` follows links, so quoting it would read the link's TARGET and
+    # write that content into a real file, turning `skills/x/SKILL.md -> /etc/…`
+    # into a copy of a host file inside the output. That is the leak the
+    # symlink-preserving copy exists to prevent, so skip the rewrite and say so
+    # (the same reason `find -type f` below never matches a symlink).
+    if [ -L "$dest_dir/SKILL.md" ]; then
+        echo "  WARN: $(basename "$dest_dir")/SKILL.md is a symlink — emitted as-is (frontmatter not quoted, tokens not expanded)" >&2
+    elif [ -f "$dest_dir/SKILL.md" ]; then
         copy_md_with_quoted_frontmatter "$dest_dir/SKILL.md" "$dest_dir/SKILL.md.tmp-q"
         mv "$dest_dir/SKILL.md.tmp-q" "$dest_dir/SKILL.md"
     fi
