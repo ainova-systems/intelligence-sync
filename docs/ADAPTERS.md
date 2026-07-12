@@ -152,7 +152,9 @@ sync_to_myide() {
                 }
                 past_fm || !in_fm { print }
             ' "$f" > "$output_dir/rules/$(basename "$f")"
-            normalize_file_to_lf "$output_dir/rules/$(basename "$f")"
+            # Every written file goes through finalize_output_file: it expands
+            # the <umbrella> / <module> layout tokens and normalizes CRLF -> LF.
+            finalize_output_file "$output_dir/rules/$(basename "$f")"
         done
     done < <(read_yaml_list "$config_file" "rules")
 }

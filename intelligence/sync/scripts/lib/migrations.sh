@@ -172,6 +172,25 @@ _mig_copy_file() {
     return 0
 }
 
+# Repo-root-relative path of the umbrella — the prefix every `sources:` entry is
+# resolved against (resolve_source_dir does "$repo_root/$entry"). `basename` is
+# only correct when the umbrella sits directly at the repo root; a nested one
+# (`platform/intelligence/`) would yield `intelligence/...` and register a source
+# that resolves nowhere. Ask git for the real prefix, and fall back to basename
+# when there is no git (a tarball checkout), which is the flat case anyway.
+_mig_umbrella_rel() {
+    local umbrella="$1" prefix=""
+    if command -v git >/dev/null 2>&1; then
+        prefix="$(git -C "$umbrella" rev-parse --show-prefix 2>/dev/null || true)"
+    fi
+    prefix="${prefix%/}"
+    if [ -n "$prefix" ]; then
+        printf '%s' "$prefix"
+    else
+        printf '%s' "$(basename "$umbrella")"
+    fi
+}
+
 # True (0) if <entry> is already listed anywhere in config.yaml (quoted or bare).
 _mig_has_source() {
     local config="$1" entry="$2"
@@ -330,7 +349,7 @@ migrate_to_0_3_1() {
     fi
 
     # config.yaml: name-agnostic relative path under the actual umbrella base.
-    _mig_add_skill_source "$umbrella/config.yaml" "$(basename "$umbrella")/$module_name/skills"
+    _mig_add_skill_source "$umbrella/config.yaml" "$(_mig_umbrella_rel "$umbrella")/$module_name/skills"
 
     echo "  [migrate 0.3.1] done — engine at '$module_name/', legacy removed, no duplicates"
 }
@@ -354,7 +373,7 @@ migrate_to_0_7_0() {
     [ -f "$config" ] || return 0
 
     local base rules_entry agents_entry
-    base="$(basename "$umbrella")"
+    base="$(_mig_umbrella_rel "$umbrella")"
     rules_entry="$base/$module_name/rules"
     agents_entry="$base/$module_name/agents"
 
