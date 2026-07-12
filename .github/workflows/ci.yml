@@ -159,6 +159,30 @@ jobs:
           grep -q "backend-developer" "$PROJ/AGENTS.md"
           grep -q "backend-add-endpoint" "$PROJ/AGENTS.md"
 
+      - name: Engine-owned rule + agent reach the outputs, with layout tokens expanded
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJ"
+          # The engine ships intelligence-authoring (rule) + intelligence-architect
+          # (agent). They must arrive via sources, and every `<umbrella>` /
+          # `<module>` token must be gone: a literal token in an output means an
+          # adapter wrote a file without finalize_output_file().
+          grep -q "intelligence-authoring" AGENTS.md
+          grep -q "intelligence-architect" AGENTS.md
+          if [ -d .claude ]; then
+            test -f .claude/rules/intelligence-authoring.md
+            test -f .claude/agents/intelligence-architect.md
+            grep -q '"intelligence/\*\*"' .claude/rules/intelligence-authoring.md
+          fi
+          leaked=$(grep -rl -e '<umbrella>' -e '<module>' \
+            .claude .cursor .github/instructions .github/agents .github/skills \
+            .codex .agents .pi .opencode AGENTS.md 2>/dev/null || true)
+          if [ -n "$leaked" ]; then
+            echo "UNEXPANDED LAYOUT TOKEN shipped into generated output:"; echo "$leaked"; exit 1
+          fi
+          echo "OK: engine rule/agent present, no unexpanded tokens"
+
       - name: Verify Claude / Cursor / Copilot / Codex outputs (if enabled)
         shell: bash
         run: |
