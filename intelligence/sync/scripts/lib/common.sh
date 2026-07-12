@@ -685,14 +685,37 @@ validate_output_path() {
             ;;
     esac
 
-    # A symlinked output dir can still point outside the repo, which the
-    # lexical pass above cannot see. Check the physical path when it exists
-    # (`pwd -P` on both sides so a symlinked repo root resolves consistently).
-    if [ -d "$canon" ]; then
-        local phys repo_phys
-        phys="$(cd "$canon" && pwd -P)"
+    # A symlink ANYWHERE on the path can still lead out of the repo, which the
+    # lexical pass above cannot see. The output itself usually does not exist on
+    # a first sync, so checking only an existing final directory would miss the
+    # common case (`.cursor` absent, but its parent `generated/` symlinked out).
+    # Walk up to the deepest component that does exist and resolve THAT
+    # physically. `-L` in the loop guard so a broken symlink is caught rather
+    # than stepped over.
+    local probe="$canon" parent
+    while [ ! -e "$probe" ] && [ ! -L "$probe" ]; do
+        parent="$(dirname "$probe")"
+        [ "$parent" = "$probe" ] && break
+        probe="$parent"
+    done
+
+    if [ -e "$probe" ] || [ -L "$probe" ]; then
+        # A symlinked FILE target (e.g. `AGENTS.md` -> /etc/hosts, or a dangling
+        # link) would be written straight through. Refuse rather than follow it;
+        # a generated output is never legitimately a file symlink.
+        if [ -L "$probe" ] && [ ! -d "$probe" ]; then
+            echo "ERROR: targets.$adapter.output ('$output_dir') resolves through a symlink ('$probe')." >&2
+            echo "  Refusing to write through it." >&2
+            exit 1
+        fi
+        # Symlinked directory: allowed only while its physical target stays
+        # inside the repo (`pwd -P` on both sides so a symlinked repo root
+        # resolves consistently).
+        local probe_dir phys repo_phys
+        if [ -d "$probe" ]; then probe_dir="$probe"; else probe_dir="$(dirname "$probe")"; fi
+        phys="$(cd "$probe_dir" 2>/dev/null && pwd -P)" || phys=""
         repo_phys="$(cd "$repo_root" && pwd -P)"
-        case "$phys" in
+        case "${phys:-/nonexistent}" in
             "$repo_phys"|"$repo_phys"/*) ;;
             *)
                 echo "ERROR: targets.$adapter.output ('$output_dir') resolves through a symlink to '$phys'," >&2

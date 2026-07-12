@@ -297,7 +297,7 @@ Built-in adapters:
 | `pi` | `pi.sh` | `.pi/` + `.agents/skills/` | Reads AGENTS.md for always-on context; generated extension surfaces scoped rules; agents become prompt templates |
 | `opencode` | `opencode.sh` | `.opencode/` + `.agents/skills/` | Reads AGENTS.md natively; agents become markdown subagents (`.opencode/agents/<name>.md`); skills via `.agents/skills/`; no scoped-rules emission (users may opt in via `instructions:` globs in `opencode.json`) |
 
-Need a target with no built-in adapter? Write it as `intelligence/adapters/<name>.sh` (beside `config.yaml`, **not** inside `intelligence/sync/scripts/adapters/`, which `update.sh` replaces wholesale). `sync.sh` scans both; a project adapter overrides a built-in of the same name. See `/intelligence-install-adapter` and `intelligence/sync/docs/ADAPTERS.md`.
+Need a target with no built-in adapter? Write it as `<intel>/adapters/<name>.sh` — beside `config.yaml`, using the folder name detected in *Phase 0*, and **never** inside `<intel>/sync/scripts/adapters/`, which `update.sh` replaces wholesale (an adapter written there is deleted by the next engine update). `sync.sh` scans both locations; a project adapter overrides a built-in of the same name. See `/intelligence-install-adapter` and `<intel>/sync/docs/ADAPTERS.md`.
 
 ### 3.2 `intelligence/rules/context.md`
 
