@@ -57,11 +57,11 @@ Name reflects the umbrella usage of "skills" for all AI artifacts (rules + agent
    grep -rinE 'powershell|cmd\.exe|/Users/|/home/|[A-Za-z]:[\\]' <rule-dirs>
 
    # R3 — a path baked into a skill's steps, excluding the skill's own bundle
-   grep -rnE '[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+\.[A-Za-z0-9]+' <skill-dirs> --include=SKILL.md \
+   grep -rnE --include=SKILL.md '[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+\.[A-Za-z0-9]+' <skill-dirs> \
      | grep -vE '(^|[^A-Za-z0-9._/-])(references|scripts|assets)/'
 
    # R4 — skills whose body never mentions verifying anything (-L lists files with NO match)
-   grep -riLE 'verif|expect|assert|check|test|IS_STATUS' <skill-dirs> --include=SKILL.md
+   grep -riLE --include=SKILL.md 'verif|expect|assert|check|test|IS_STATUS' <skill-dirs>
    ```
 
    `R4` is a coarse net, not a verdict: a skill that merely *mentions* a verification command anywhere passes it. Read the final step of every skill regardless — the question is whether something at the end **proves the work landed**, not whether the word appears.
