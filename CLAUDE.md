@@ -68,8 +68,10 @@ Procedure (run from a clean `main`, working tree already holding the change):
 
 ```bash
 # 1. Lockstep version bump (VERSION + INIT.md example + all examples/*/config.yaml)
-#    and a CHANGELOG.md [X.Y.Z] — <date> section (move items out of [Unreleased];
-#    breaking releases add a ### Breaking subsection with verifiable post-conditions).
+#    and a NEW CHANGELOG.md [X.Y.Z] — <date> section written directly — there is no
+#    [Unreleased] section: every change ships as a release, so nothing ever waits in
+#    one. (Breaking releases add a ### Breaking subsection with verifiable
+#    post-conditions.)
 # 2. Verify lockstep locally (mirrors CI repo-purity):
 V=$(tr -d ' \t\r\n' < intelligence/sync/scripts/VERSION)
 for cf in examples/*/config.yaml; do

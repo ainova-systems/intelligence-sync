@@ -2,15 +2,13 @@
 
 All notable changes to intelligence-sync are recorded here.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — with one deliberate departure: **there is no `[Unreleased]` section.** Every change ships as a release. A version bump lands in one commit with `scripts/VERSION`, the `sync_version` stamp in `INIT.md`, and every `examples/*/config.yaml` (CI fails otherwise), and the tag and GitHub release follow immediately — so "merged but not released" is a state this project does not have. Write the new `## [X.Y.Z] — <date>` section directly.
 
 **Upgrading** — paste this to your AI agent:
 
 ```
 Update intelligence-sync: fetch the latest engine from https://github.com/ainova-systems/intelligence-sync and run its update flow to migrate this project to the newest version. Leave my rules, agents, and project skills untouched. If it fails, read the CHANGELOG "### Breaking" entries between my version and the latest, base your fix plan on them, make sure you are running the latest scripts, and retry; ask me only if it still fails.
 ```
-
-## [Unreleased]
 
 ## [0.8.0] — 2026-07-14
 
