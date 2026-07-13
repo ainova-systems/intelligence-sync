@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Update intelligence-sync: fetch the latest engine from https://github.com/ainova-systems/intelligence-sync and run its update flow to migrate this project to the newest version. Leave my rules, agents, and project skills untouched. If it fails, read the CHANGELOG "### Breaking" entries between my version and the latest, base your fix plan on them, make sure you are running the latest scripts, and retry; ask me only if it still fails.
 ```
 
-## [0.8.0] — 2026-07-14
+## [0.7.2] — 2026-07-14
 
 0.7.0 shipped the engine's authoring discipline but left out its thesis. This release puts it back: **subtraction is the job** — every line is loaded into someone's context out of a shared, finite budget, so the default answer to "should this be a rule?" is no. The audit skill is rebuilt around the same idea, and stops assuming a layout it has no right to assume.
 
