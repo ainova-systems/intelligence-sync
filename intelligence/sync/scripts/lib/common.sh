@@ -1173,20 +1173,24 @@ validate_pack_refs() {
     # DIRECTORY, so the second pack would skip the clear and copy its subpaths
     # in beside the first's, leaving one directory holding two packs' content
     # under a single `.pack`. Nothing downstream can untangle that.
-    local rel canon seen=""
+    local rel canon i
+    local mirror_dirs=() mirror_owners=()
     while IFS= read -r name; do
         [ -z "$name" ] && continue
         rel="$(get_pack_field "$config_file" "$name" "mirror")"
         [ -n "$rel" ] || continue
         canon="$(resolve_mirror_dir "$repo_root" "$config_file" "$name" "$rel")"
-        case "$seen" in
-            *"|$canon|"*)
-                echo "ERROR: packs.$name.mirror ('$rel') is already the mirror of another pack." >&2
-                echo "  Each pack needs its own directory — two packs would overwrite each other there." >&2
+        i=0
+        while [ "$i" -lt "${#mirror_dirs[@]}" ]; do
+            if [ "${mirror_dirs[$i]}" = "$canon" ]; then
+                echo "ERROR: packs.$name.mirror ('$rel') is already the mirror of pack '${mirror_owners[$i]}'." >&2
+                echo "  Each pack needs its own directory — sharing one leaves a single '.pack' stamp" >&2
+                echo "  naming one pack over a directory holding both packs' content." >&2
                 exit 1
-                ;;
-        esac
-        seen="$seen|$canon|"
+            fi
+            i=$((i + 1))
+        done
+        mirror_dirs+=("$canon"); mirror_owners+=("$name")
     done < <(read_yaml_keys "$config_file" "packs")
 }
 

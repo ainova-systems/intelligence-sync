@@ -199,6 +199,26 @@ jobs:
           [ "$rc" -eq 1 ] || { echo "expected exit 1 for an undeclared pack, got $rc"; exit 1; }
           case "$err" in *"typo-pack"*) ;; *) echo "$err"; echo "error must name the pack"; exit 1 ;; esac
 
+          # Two packs sharing one mirror FAILS the run. The wipe is claimed per
+          # directory, so the second pack would skip the ownership check and the
+          # shared clear, then `rm -rf` its own subpath over the first pack's
+          # files — leaving one directory holding both packs' content under a
+          # single `.pack` that names only one of them.
+          git checkout -- intelligence/config.yaml
+          awk '
+            /^  shared-intel:/ { print; inp = 1; next }
+            inp && /^sources:/ {
+              print "  twin-intel:"
+              print "    url: file://'"$PACK"'"
+              print "    mirror: \"intelligence/external/shared-intel\""
+              inp = 0
+            }
+            { print }
+          ' intelligence/config.yaml > intelligence/config.tmp && mv intelligence/config.tmp intelligence/config.yaml
+          rc=0; err=$(bash intelligence/sync/scripts/sync.sh 2>&1 >/dev/null) || rc=$?
+          [ "$rc" -eq 1 ] || { echo "expected exit 1 for a shared mirror, got $rc"; exit 1; }
+          case "$err" in *twin-intel*shared-intel*) ;; *) echo "$err"; echo "error must name BOTH packs"; exit 1 ;; esac
+
           # A pack with no mirror keeps working and leaves NOTHING in the repo.
           git checkout -- intelligence/config.yaml
           sed -i '/mirror: "intelligence\/external\/shared-intel"/d' intelligence/config.yaml
