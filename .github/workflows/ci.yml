@@ -157,6 +157,27 @@ jobs:
           test ! -e intelligence/external/shared-intel/skills/shared-do-thing
           test -f intelligence/external/shared-intel/skills/shared-ship-it/SKILL.md
 
+          # A MOVED upstream (same pack, new url) refreshes the mirror. The
+          # mirror is declared per pack, so a stamped directory stays this
+          # pack's even after its url changes — freezing it at the old content
+          # while the generated output follows the new repo would break exactly
+          # the reviewability the mirror exists for, and do it silently.
+          git add -A && git -c user.email=ci@example.com -c user.name=ci commit -qm bumped
+          MOVED=$RUNNER_TEMP/moved-intel
+          git clone -q "$PACK" "$MOVED"
+          printf -- '---\nname: shared-baseline\n---\n\nFrom the moved repo.\n' > "$MOVED/rules/shared-baseline.md"
+          git -C "$MOVED" add -A
+          git -C "$MOVED" -c user.email=ci@example.com -c user.name=ci commit -qm moved
+          # Same pin, new home — the clone carries the tags, so move v1.1.0 onto
+          # the moved commit rather than adding a ref the config does not use.
+          git -C "$MOVED" tag -f v1.1.0 >/dev/null
+          sed -i "s|url: file://$PACK\$|url: file://$MOVED|" intelligence/config.yaml
+          out=$(bash intelligence/sync/scripts/sync.sh 2>&1)
+          case "$out" in *"not a pack's"*) echo "$out"; echo "a moved upstream must refresh, not freeze"; exit 1 ;; esac
+          grep -q "^url=file://$MOVED\$" intelligence/external/shared-intel/.pack
+          grep -q '^From the moved repo\.$' intelligence/external/shared-intel/rules/shared-baseline.md
+          git checkout -- intelligence/config.yaml
+
           # A directory that is not ours is never cleared.
           rm -rf intelligence/external
           mkdir -p intelligence/external/shared-intel

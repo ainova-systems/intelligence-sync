@@ -464,9 +464,15 @@ _mig_pack_name_from_url() {
 # Inline `git+` specs remain legal afterwards — they are simply no longer the
 # only way to reach a remote source, and they are always transient.
 #
-# Precondition is structural: no `external:` key and no `git+` token ⇒ applied
-# ⇒ silent no-op. Fail-closed: the rewrite is staged in a temp file and verified
-# before it replaces config.yaml.
+# Precondition is structural, and each key is a one-way marker: `external:` only
+# ever existed BEFORE 0.10.0, `packs:` only ever exists after it. So an
+# `external:` key ⇒ convert; otherwise a `packs:` key ⇒ applied ⇒ silent no-op;
+# otherwise convert only if there is an inline spec to convert. That last clause
+# is what keeps the migration idempotent once inline specs are legal again: the
+# run that converts them writes `packs:`, and every later run stops at the marker
+# instead of appending a SECOND top-level `packs:` key for each spec added since.
+# Fail-closed: the rewrite is staged in a temp file and verified before it
+# replaces config.yaml.
 #
 # migrate_to_0_10_0 <umbrella_dir> <module_name> [<upstream_module_dir> — unused]
 migrate_to_0_10_0() {
@@ -476,12 +482,14 @@ migrate_to_0_10_0() {
 
     local has_external=0
     grep -q '^external:[[:space:]]*$' "$config" && has_external=1
+    local has_packs=0
+    grep -q '^packs:[[:space:]]*$' "$config" && has_packs=1
     local has_inline=0
     # ERE, and anchored to a list entry: `\|` is a GNU BRE extension that BSD
     # grep (the macOS default) reads as a literal, and matching `git+` anywhere
     # would fire on the comment that documents the old spec format.
     grep -qE '^[[:space:]]*-[[:space:]]*["'\'']?git\+' "$config" && has_inline=1
-    if [ "$has_external" -eq 0 ] && [ "$has_inline" -eq 0 ]; then
+    if [ "$has_external" -eq 0 ] && { [ "$has_packs" -eq 1 ] || [ "$has_inline" -eq 0 ]; }; then
         return 0
     fi
 
@@ -579,9 +587,14 @@ migrate_to_0_10_0() {
         done < <(_mig_read_sources "$config" "$section")
     done
 
+    # An `external:` block with no remote source at all declares nothing — emit
+    # no `packs:` key rather than a dangling empty one, and drop `external:`.
+    local emit_packs=1
+    [ "${#names[@]}" -eq 0 ] && emit_packs=0
+
     local tmp="$config.mig.tmp" mapfile_="$config.mig.map"
     printf '%s' "$map" > "$mapfile_"
-    awk -v packs="$packs_block" -v mapfile="$mapfile_" '
+    awk -v packs="$packs_block" -v mapfile="$mapfile_" -v emit="$emit_packs" '
         BEGIN {
             while ((getline line < mapfile) > 0) {
                 sub(/\r$/, "", line)
@@ -596,7 +609,7 @@ migrate_to_0_10_0() {
         in_ext && /^[[:space:]]/ { next }
         in_ext { in_ext = 0 }
         # Emit packs: immediately before sources:.
-        /^sources:[[:space:]]*$/ && !done_packs {
+        /^sources:[[:space:]]*$/ && emit == 1 && !done_packs {
             printf "packs:\n%s\n", packs
             done_packs = 1
         }
@@ -613,11 +626,15 @@ migrate_to_0_10_0() {
             }
         }
         { print }
-        END { if (!done_packs) printf "packs:\n%s\n", packs }
+        END { if (emit == 1 && !done_packs) printf "packs:\n%s\n", packs }
     ' "$config" > "$tmp"
 
-    # Verify the staged file before it replaces anything.
-    if ! grep -q '^packs:[[:space:]]*$' "$tmp" || grep -q '^external:[[:space:]]*$' "$tmp"; then
+    # Verify the staged file before it replaces anything: `external:` gone, and
+    # EXACTLY the expected number of top-level `packs:` keys — a second one
+    # would be duplicate-key YAML that strict parsers reject.
+    local packs_keys
+    packs_keys="$(grep -c '^packs:[[:space:]]*$' "$tmp" || true)"
+    if [ "$packs_keys" -ne "$emit_packs" ] || grep -q '^external:[[:space:]]*$' "$tmp"; then
         rm -f "$tmp" "$mapfile_"
         is_status error "migrate_to_0_10_0 could not rewrite config.yaml"
         echo "  ERROR: failed to convert remote sources to packs in $config." >&2
@@ -627,7 +644,11 @@ migrate_to_0_10_0() {
 
     mv "$tmp" "$config"
     rm -f "$mapfile_"
-    echo "  [migrate 0.10.0] done — ${#names[@]} pack(s) declared${ext_dir:+, mirrored under $ext_dir}"
+    if [ "$emit_packs" -eq 0 ]; then
+        echo "  [migrate 0.10.0] done — no remote source to declare, dropped the empty 'external:' block"
+    else
+        echo "  [migrate 0.10.0] done — ${#names[@]} pack(s) declared${ext_dir:+, mirrored under $ext_dir}"
+    fi
 }
 
 # Read one `sources.<section>` list, one raw value per line (quotes stripped).

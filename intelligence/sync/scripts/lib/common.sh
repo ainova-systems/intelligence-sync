@@ -122,8 +122,10 @@ source_is_pack() {
     esac
 }
 
-# True (0) if a source token resolves to a directory OUTSIDE the repo (a remote
-# spec, or a pack with no `mirror:`) — i.e. one with no committable path.
+# True (0) if a source token is a plain repo-relative path — i.e. NOT a pack
+# reference and NOT an inline remote spec. The inverse of "resolves through a
+# clone", which is what every caller that pattern-matches a token against a
+# real directory needs.
 source_is_local_path() {
     source_is_pack "$1" && return 1
     source_is_remote "$1" && return 1
@@ -363,20 +365,6 @@ fetch_remote_source() {
     return 0
 }
 
-# Read one `key=value` line out of a pack stamp file. Echoes nothing when the
-# file or key is absent. Strips a trailing CR so a stamp that went through a
-# CRLF-normalizing checkout still parses.
-pack_stamp_field() {
-    local file="$1" key="$2" line
-    [ -f "$file" ] || return 0
-    while IFS= read -r line || [ -n "$line" ]; do
-        line="${line%$'\r'}"
-        case "$line" in
-            "$key="*) printf '%s' "${line#"$key="}"; return 0 ;;
-        esac
-    done < "$file"
-}
-
 # Copy a resolved remote source out of the transient clone into the pack's
 # declared `mirror:` directory, so pack content is committed and an upstream
 # bump shows up in `git diff` instead of only in the generated output. Echoes
@@ -393,8 +381,8 @@ pack_stamp_field() {
 # clone cache, which is what makes "wipe once per run" work across the separate
 # subshells each resolve_source_dir call runs in.
 #
-# The wipe is guarded by the stamp: a directory that exists WITHOUT a `.pack`
-# naming this repo is never deleted — it belongs to the project, not to us.
+# The wipe is guarded by the stamp: a NON-EMPTY directory with no `.pack` in it
+# is never deleted — it belongs to the project, not to us.
 # <mirror_rel> is the path as authored in config.yaml, used only in messages.
 # Usage: materialize_pack <clone> <src_dir> <url> <ref> <subpath> <mirror> <mirror_rel>
 materialize_pack() {
@@ -404,20 +392,28 @@ materialize_pack() {
     # already cleared this path". Keying it on the clone would let two packs
     # that share a url@ref but declare different mirrors claim each other's,
     # leaving the second mirror unstamped and never pruned.
+    #
     # Same cache-root fallback as the clone: the claim must exist even when the
     # caller is not sync.sh, or every token would re-wipe the pack and only the
-    # last subpath would survive.
+    # last subpath would survive. That fallback root is NOT run-scoped, though,
+    # so the claim carries `$$` — stable across the command-substitution
+    # subshells of one run, different for the next. A claim left behind by an
+    # earlier run must never suppress this run's wipe: that would rebuild the
+    # mirror with no `.pack` in it and freeze it against the guard below.
     local cache_root claim
     cache_root="${IS_REMOTE_CACHE:-${TMPDIR:-/tmp}/intelligence-sync-remotes}"
     mkdir -p "$cache_root" 2>/dev/null || true
-    claim="$cache_root/$(printf '%s' "$pack_dir" | cksum | awk '{print $1 "-" $2}').packdir"
+    claim="$cache_root/$$-$(printf '%s' "$pack_dir" | cksum | awk '{print $1 "-" $2}').packdir"
 
     if [ ! -f "$claim" ]; then
-        # Refuse to wipe a directory that is not ours: no stamp, or a stamp
-        # naming a different repo, means the path belongs to the project.
+        # Refuse to wipe a directory that is not ours. Ownership is the PRESENCE
+        # of the stamp, not the url inside it: a mirror is declared per pack, so
+        # a stamped directory is this pack's even after its `url:` is edited —
+        # a moved or renamed upstream must refresh the mirror, not freeze it at
+        # the old content while the generated output silently follows the new.
         if [ -d "$pack_dir" ] && [ -n "$(find "$pack_dir" -mindepth 1 -maxdepth 1 2>/dev/null)" ] \
-            && [ "$(pack_stamp_field "$pack_dir/.pack" url)" != "$url" ]; then
-            echo "  WARN: mirror '$pack_dir' holds content that is not this pack's — skipping materialization" >&2
+            && [ ! -f "$pack_dir/.pack" ]; then
+            echo "  WARN: mirror '$pack_dir' holds content that is not a pack's (no .pack stamp) — skipping materialization" >&2
             printf '%s' "$src_dir"
             return 0
         fi
@@ -1146,6 +1142,13 @@ validate_pack_refs() {
     if [ "$bad" -ne 0 ]; then
         known="$(read_yaml_keys "$config_file" "packs" | tr '\n' ' ')"
         echo "  Declared packs: ${known:-<none>}" >&2
+        # `targets:` accepts the flow form, so a user reasonably writes
+        # `packs:\n  shared: { url: … }` — which reads as zero declared packs and
+        # makes the message above point at a typo that is not there.
+        if grep -qE '^[[:space:]]+[A-Za-z0-9._-]+:[[:space:]]*\{' "$config_file"; then
+            echo "  Note: a pack must be declared in block form — 'name:' on its own line," >&2
+            echo "        then indented 'url:' / 'ref:' / 'mirror:'. The '{ … }' form is not read here." >&2
+        fi
         exit 1
     fi
 
