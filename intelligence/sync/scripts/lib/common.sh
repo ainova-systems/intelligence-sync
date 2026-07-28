@@ -773,6 +773,10 @@ get_model_default() {
 # `.*:` — a greedy match cuts at the LAST colon on the line, which turns
 # `url: https://host/repo.git` into `//host/repo.git`. An unquoted value also
 # drops a trailing ` # comment`, per YAML; inside quotes a `#` is content.
+#
+# The sub-key is matched LITERALLY (`index(...) == 1`), never interpolated into
+# a regex: a pack name may contain `.`, which as a pattern is any character, so
+# `packs.a.b` would happily read a pack named `axb`.
 get_nested_yaml_value() {
     local file="$1"
     local section="$2"
@@ -782,9 +786,11 @@ get_nested_yaml_value() {
         { sub(/\r$/, "") }
         $0 ~ "^" section ":[[:space:]]*$" { in_section=1; in_sub=0; next }
         in_section && /^[a-zA-Z]/ && $0 !~ "^" section ":" { in_section=0; in_sub=0 }
-        in_section && $0 ~ "^  " subname ":[[:space:]]*$" { in_sub=1; next }
-        in_section && in_sub && /^  [a-zA-Z]/ { in_sub=0 }
-        in_section && in_sub && $0 ~ "^    " key ":" {
+        in_section && index($0, "  " subname ":") == 1 {
+            if (substr($0, length(subname) + 4) ~ /^[[:space:]]*$/) { in_sub=1; next }
+        }
+        in_section && in_sub && /^  [A-Za-z0-9_]/ { in_sub=0 }
+        in_section && in_sub && index($0, "    " key ":") == 1 {
             val = $0
             sub(/^[[:space:]]*[^:]*:[[:space:]]*/, "", val)
             if (val ~ /^"/ || val ~ /^\047/) {
@@ -1144,8 +1150,16 @@ validate_pack_refs() {
         echo "  Declared packs: ${known:-<none>}" >&2
         # `targets:` accepts the flow form, so a user reasonably writes
         # `packs:\n  shared: { url: … }` — which reads as zero declared packs and
-        # makes the message above point at a typo that is not there.
-        if grep -qE '^[[:space:]]+[A-Za-z0-9._-]+:[[:space:]]*\{' "$config_file"; then
+        # makes the message above point at a typo that is not there. Scoped to
+        # the `packs:` block: every shipped example writes `targets:` in flow
+        # form, so an unscoped match would print this note on every failure.
+        if awk '
+            { sub(/\r$/, "") }
+            /^packs:[[:space:]]*$/ { in_p = 1; next }
+            /^[A-Za-z]/ { in_p = 0 }
+            in_p && /^  [A-Za-z0-9_][A-Za-z0-9._-]*:[[:space:]]*\{/ { found = 1; exit }
+            END { exit !found }
+        ' "$config_file"; then
             echo "  Note: a pack must be declared in block form — 'name:' on its own line," >&2
             echo "        then indented 'url:' / 'ref:' / 'mirror:'. The '{ … }' form is not read here." >&2
         fi
@@ -1154,12 +1168,25 @@ validate_pack_refs() {
 
     # Validate every declared mirror once, before a single clone runs, so an
     # unsafe path fails the run rather than being discovered mid-materialization.
-    local rel
+    #
+    # Two packs sharing one mirror is refused here too: the wipe is claimed per
+    # DIRECTORY, so the second pack would skip the clear and copy its subpaths
+    # in beside the first's, leaving one directory holding two packs' content
+    # under a single `.pack`. Nothing downstream can untangle that.
+    local rel canon seen=""
     while IFS= read -r name; do
         [ -z "$name" ] && continue
         rel="$(get_pack_field "$config_file" "$name" "mirror")"
         [ -n "$rel" ] || continue
-        resolve_mirror_dir "$repo_root" "$config_file" "$name" "$rel" >/dev/null
+        canon="$(resolve_mirror_dir "$repo_root" "$config_file" "$name" "$rel")"
+        case "$seen" in
+            *"|$canon|"*)
+                echo "ERROR: packs.$name.mirror ('$rel') is already the mirror of another pack." >&2
+                echo "  Each pack needs its own directory — two packs would overwrite each other there." >&2
+                exit 1
+                ;;
+        esac
+        seen="$seen|$canon|"
     done < <(read_yaml_keys "$config_file" "packs")
 }
 
@@ -1517,7 +1544,7 @@ read_yaml_keys() {
         { sub(/\r$/, "") }
         $0 ~ "^" section ":[[:space:]]*$" { in_sec = 1; next }
         /^[A-Za-z]/ { in_sec = 0 }
-        in_sec && /^  [A-Za-z0-9][A-Za-z0-9._-]*:[[:space:]]*$/ {
+        in_sec && /^  [A-Za-z0-9_][A-Za-z0-9._-]*:[[:space:]]*$/ {
             k = $0
             sub(/^[[:space:]]+/, "", k)
             sub(/:[[:space:]]*$/, "", k)
