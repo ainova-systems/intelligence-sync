@@ -274,6 +274,14 @@ warn_unsynced "$REPO_ROOT" "$CONFIG_FILE"
 # (helpful when defaults move forward — e.g., gpt-5.5 -> gpt-5.6).
 report_model_drift "$CONFIG_FILE"
 
+# This is the final vendored line; development continues in the intelligence
+# CLI. One stderr line so IS_STATUS stdout parsing (skills, CI) is untouched,
+# and suppressible for pipelines. The move is the update skill's step 7 and
+# needs your explicit approval — nothing here changes on its own.
+if [ -z "${IS_SUPPRESS_CLI_NOTE:-}" ]; then
+    echo "NOTE: this vendored engine is the final line and keeps working. Its successor is the intelligence CLI — tell your agent \"Update intelligence-sync\" to review the move." >&2
+fi
+
 echo ""
 # sync.sh never migrates (the update flow owns that), so success is always ok.
 is_status ok "synced=$synced"

@@ -229,3 +229,9 @@ echo "  Updated:   $MODULE_NAME/{scripts,INIT.md,docs}, $MODULE_NAME/skills/inte
 echo "  Untouched: your <umbrella>/rules, <umbrella>/agents, project skills, <umbrella>/adapters."
 echo "             config.yaml only gains the engine's managed keys (sync_version, module sources)."
 echo "  Next: bash $MODULE_NAME/scripts/sync.sh"
+if [ -z "${IS_SUPPRESS_CLI_NOTE:-}" ]; then
+    echo "" >&2
+    echo "NOTE: this is the final vendored line — it keeps working, and this upstream stays where it is." >&2
+    echo "      Development continues in the intelligence CLI. To review the one-way move, tell your agent" >&2
+    echo "      \"Update intelligence-sync\" again: the update skill walks it with your explicit approval." >&2
+fi

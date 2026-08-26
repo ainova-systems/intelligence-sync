@@ -10,6 +10,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Update intelligence-sync: fetch the latest engine from https://github.com/ainova-systems/intelligence-sync and run its update flow to migrate this project to the newest version. Leave my rules, agents, and project skills untouched. If it fails, read the CHANGELOG "### Breaking" entries between my version and the latest, base your fix plan on them, make sure you are running the latest scripts, and retry; ask me only if it still fails.
 ```
 
+Since 0.10.2 the same prompt also offers the one-way move to the intelligence CLI — described first, performed only if you say yes.
+
+## [0.10.2] — 2026-08-26
+
+The final release of the vendored engine. It keeps working, this repository stays at its URL, and nothing changes on its own. Development continues in the **intelligence CLI** ([ainova-systems/intelligence](https://github.com/ainova-systems/intelligence)), and the update flow now walks the move there on your explicit approval.
+
+### Added
+
+- **The `intelligence-update` skill can perform the switch to the CLI (new step 7), and only on an explicit yes.** After a normal update leaves the project healthy, it checks that the CLI is generally available (a published version with no prerelease suffix — otherwise it says so and stops), describes exactly what would change, asks, requires a clean worktree, previews with `intelligence migrate --dry-run`, confirms again, then runs `intelligence migrate` and verifies with `doctor` + `sync`. The `--yes` flag covers the update diff only and never this decision. Two runs therefore get a project across: the first brings the engine to this final version, the second offers the move — which is also the order `migrate` requires, since it accepts only a project already at the final vendored schema.
+
+### Changed
+
+- `sync.sh` and `update.sh` print one stderr line naming this as the final vendored line and pointing at the update skill (`IS_SUPPRESS_CLI_NOTE=1` silences it). stdout and the `IS_STATUS` contract are untouched.
+- The `release-npm` workflow is removed: publishing the CLI belongs to its own repository.
+
+No schema change — the stamp advances to 0.10.2 on update.
+
 ## [0.10.1] — 2026-07-29
 
 ### Fixed

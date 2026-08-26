@@ -1,6 +1,6 @@
 ---
 name: intelligence-update
-description: "Update or migrate intelligence-sync: discover engine, read changelog, run migration chain, verify"
+description: "Update intelligence-sync, then offer the one-way switch to the intelligence CLI - performed only on the user's explicit approval"
 argument-hint: "[--yes]"
 agent: intelligence-operator
 ---
@@ -11,11 +11,16 @@ You are the **intelligent driver** of an update. The bash engine is
 deterministic and fail-closed — it never guesses; on any state it cannot
 resolve it prints `IS_STATUS=<code>` and stops. Your job: discover the engine,
 understand what is changing (read the CHANGELOG across the version gap), run
-the migration chain, branch on the status, and **verify afterward**. Ask the
-user only when genuinely ambiguous.
+the update, branch on the status, and **verify afterward**.
 
 Trigger: the user says something like *"update / migrate intelligence-sync"*.
 They never run shell commands by hand — you do.
+
+> **This is the final line of the vendored engine.** It keeps working
+> indefinitely and this repository stays at its URL, so nothing breaks by
+> standing still. Development continues in the **intelligence CLI**, and
+> section 7 below is the supported way across — one-way, and only ever with
+> the user's explicit approval.
 
 ## Key facts
 
@@ -24,13 +29,17 @@ They never run shell commands by hand — you do.
 - **Engine = a module discovered by ROLE, not by name**: a directory under
   the umbrella whose `scripts/sync.sh` **and** `scripts/VERSION` both exist
   (conventionally `sync/`, but never assume the folder name).
-- **Applied schema version** is the frozen contract key
-  `sync_version` in `config.yaml` (a permanent top-level scalar;
-  absent ⇒ pre-0.3.1). **Engine version** is `<module>/scripts/VERSION`.
-  The gap between them is the set of breaking changes to apply.
+- **Applied schema version** is the frozen contract key `sync_version` in
+  `config.yaml` (a permanent top-level scalar; absent ⇒ pre-0.3.1).
+  **Engine version** is `<module>/scripts/VERSION`. The gap between them is
+  the set of breaking changes to apply.
 - Pre-0.3.1 projects have the engine flat at `<umbrella>/scripts/` and **no**
-  `sync_version` key. Their frozen `update.sh` fails closed
-  against the modular upstream (changes nothing) — you bootstrap the first hop.
+  `sync_version` key. Their frozen `update.sh` fails closed against the
+  modular upstream (changes nothing) — you bootstrap the first hop.
+- **Already on the CLI** (a root `intelligence.yaml` exists, no vendored
+  module): this skill does not apply. Run
+  `npm i -g @ainova-systems/intelligence@latest` then `intelligence upgrade`,
+  and stop.
 - The `intelligence-` skill prefix is **reserved** for upstream meta-skills.
 
 ## Steps
@@ -44,7 +53,7 @@ role: search `<umbrella>` (one level deep) for a directory `<M>` with both
 - A module engine exists → use it; **never** fall back to a flat
   `<umbrella>/scripts/` even if present (that's stale legacy).
 - No module engine, only flat `<umbrella>/scripts/` (or nothing) → this is a
-  pre-0.3.1 / un-bootstrapped project; go to step 2's bootstrap.
+  pre-0.3.1 / un-bootstrapped project; go to step 3a's bootstrap.
 - No `config.yaml` at all → not bootstrapped; point the user at upstream
   `INIT.md` and stop.
 
@@ -64,9 +73,9 @@ declines. The temp clone is only for reading the CHANGELOG and as the source
 for the eventual write.
 
 ### 3. Understand what is changing (changelog-aware)
-Determine the project's current version = the `sync_version`
-value in `config.yaml`, or `0.0.0` if the key is absent (pre-0.3.1). The
-engine version = `<tmp>/intelligence/sync/scripts/VERSION`.
+Determine the project's current version = the `sync_version` value in
+`config.yaml`, or `0.0.0` if the key is absent (pre-0.3.1). The engine
+version = `<tmp>/intelligence/sync/scripts/VERSION`.
 
 Read `<tmp>/CHANGELOG.md`. For every release in the range
 **`current < release <= engine`** (inclusive of the target release — its
@@ -90,9 +99,6 @@ migrations, and anything to verify afterward. Surface it to the user; without
   then run `<umbrella>/sync/scripts/update.sh`.
 
 ### 4. Run the engine
-Run the `update.sh` of the engine determined in 3a — the **discovered module
-dir** for a modular project (whatever its name), or the just-created
-`<umbrella>/sync` for the legacy bootstrap path:
 
 ```
 bash <engine-module>/scripts/update.sh --yes   # omit --yes to confirm the diff
@@ -112,12 +118,15 @@ Capture stdout; find the last `IS_STATUS=<code> [IS_DETAIL=...]` line.
 | `error` | Engine couldn't proceed | Show message; check `REPO_URL`. Stop. |
 | *(no status)* | Engine crashed before contract | Show full output; don't modify the tree. Stop. |
 
-On any failure code, first re-read the upstream `CHANGELOG.md` entries for `current < release <= engine` (esp. `### Breaking`) — the breaking change usually explains the error and what the user must do — before retrying or escalating.
+On any failure code, first re-read the upstream `CHANGELOG.md` entries for
+`current < release <= engine` (esp. `### Breaking`) — the breaking change
+usually explains the error and what the user must do — before retrying or
+escalating.
 
 Genuinely **ambiguous** tree (e.g. both a legacy flat `<umbrella>/scripts/`
-and a populated module, no clear `sync_version`): inspect both,
-summarize the difference, ask the user which is authoritative, apply their
-choice. Never guess.
+and a populated module, no clear `sync_version`): inspect both, summarize the
+difference, ask the user which is authoritative, apply their choice. Never
+guess.
 
 ### 6. Verify (always, after `ok`/`migrated`)
 
@@ -126,9 +135,8 @@ Structural — always:
   (meta-skills live only in the module's `skills/`).
 - Project content intact: `<umbrella>/{rules,agents}/` and any
   non-`intelligence-` skills untouched.
-- `config.yaml` has `sync_version` equal to the engine
-  `scripts/VERSION`, and `sources.skills` includes the module skills path
-  exactly once.
+- `config.yaml` has `sync_version` equal to the engine `scripts/VERSION`, and
+  `sources.skills` includes the module skills path exactly once.
 
 Changelog-driven — per release crossed:
 - For each **`### Breaking`** item in the crossed range, verify its stated
@@ -140,20 +148,98 @@ Then regenerate IDE outputs:
 ```
 bash <umbrella>/sync/scripts/sync.sh
 ```
-Relay any model-drift report. Finally summarize: versions before→after, the
-breaking changes applied, verification result, anything the user must act on.
-Clean up the temp clone.
+Relay any model-drift report. Summarize: versions before→after, the breaking
+changes applied, verification result, anything the user must act on. Clean up
+the temp clone.
+
+### 7. Offer the switch to the intelligence CLI — approval required
+
+Only after step 6 reports a healthy project. The switch is **one-way** and
+rewrites the project's layout, so it happens only when the user says so in
+this conversation.
+
+**7a. Check the CLI is generally available.**
+
+```
+npm view @ainova-systems/intelligence version
+```
+
+If that fails, or the version carries a prerelease suffix (`-rc.N`, `-beta`,
+anything after a `-`), the CLI is not generally available yet: say so in one
+line, state that the vendored setup keeps working, and **stop here**. Do not
+offer the switch, and never install a prerelease on a real project.
+
+**7b. Describe what would change, then ask.** Present it plainly:
+
+- `config.yaml` becomes `intelligence.yaml` at the repository root (the old
+  file is kept at `.intelligence/backup/config.yaml`).
+- Declared `packs:` become `packages:`, keeping their pins; mirrored pack
+  content is *copied* into a gitignored `.intelligence/` store, not refetched.
+- `intelligence.lock` is created and should be committed.
+- The vendored engine directory and the pack mirrors are deleted — the engine
+  ships inside the npm package from then on.
+- Updates stop going through this skill: `intelligence update` moves packages,
+  `intelligence upgrade` moves the engine.
+
+Then ask for an explicit yes. **`--yes` does not cover this** — that flag only
+skips the diff confirmation in step 3, never this decision. No answer, a
+hedged answer, or anything short of clear approval ⇒ do not proceed; leave the
+project on the vendored setup and say it can be done any time.
+
+**7c. Preconditions.** The working tree must be clean (`git status
+--porcelain` empty) — `migrate` refuses otherwise, and the point is a
+single reviewable commit. If it is dirty, ask the user to commit or stash;
+never pass `--force` on their behalf.
+
+**7d. Install and preview.**
+
+```
+npm i -g @ainova-systems/intelligence@latest
+intelligence --version
+intelligence migrate --dry-run
+```
+
+`--dry-run` stages and verifies the whole conversion and writes nothing. Show
+the user the manifest it printed and any warning it raised. If it fails, stop
+and report — the project is untouched and still works.
+
+**7e. Confirm once more, then migrate.**
+
+```
+intelligence migrate
+```
+
+It is transactional: the vendored engine, `config.yaml` and the mirrors are
+deleted only after a real sync of the new state reported `IS_STATUS=ok`. Any
+earlier failure rolls back to an untouched project.
+
+**7f. Verify the new setup.**
+
+```
+intelligence doctor
+intelligence sync
+```
+
+`doctor` must exit 0. Confirm `intelligence.yaml` and `intelligence.lock` exist
+at the root, `.intelligence/` is gitignored, the vendored module is gone, and
+the generated outputs still contain the project's own rules and skills. Tell
+the user to review and commit the single diff, and that from here on updates
+are `intelligence update` / `intelligence upgrade` — this skill is no longer
+part of the project.
 
 ## Notes
 
-- Everything is **idempotent**. Re-running on a current project is a safe
-  no-op (`IS_STATUS=ok`).
+- Everything in steps 1–6 is **idempotent**. Re-running on a current project
+  is a safe no-op (`IS_STATUS=ok`).
 - Correctness rests on the engine's idempotent structural preconditions, not
-  on the version stamp — a missing/wrong `sync_version` cannot
-  cause a needed migration to be skipped; it only weakens the
-  `ahead-of-engine` guard until re-stamped.
+  on the version stamp — a missing/wrong `sync_version` cannot cause a needed
+  migration to be skipped; it only weakens the `ahead-of-engine` guard until
+  re-stamped.
 - Never touch `config.yaml` beyond what the engine does (the idempotent
-  `sources.skills` line and the `sync_version` key). Never
-  move/delete project skills, rules, or agents.
+  `sources.skills` line and the `sync_version` key). Never move/delete project
+  skills, rules, or agents.
 - Sibling modules beside the engine module are independent — only operate on
   the discovered engine module.
+- The switch in step 7 needs the project at the final vendored schema, which
+  steps 3–5 have just guaranteed. That is why it is offered here and not as a
+  standalone action.
