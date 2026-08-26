@@ -37,9 +37,9 @@ They never run shell commands by hand — you do.
   `sync_version` key. Their frozen `update.sh` fails closed against the
   modular upstream (changes nothing) — you bootstrap the first hop.
 - **Already on the CLI** (a root `intelligence.yaml` exists, no vendored
-  module): this skill does not apply. Run
-  `npm i -g @ainova-systems/intelligence@latest` then `intelligence upgrade`,
-  and stop.
+  module): this skill does not apply. Run `intelligence update` there — it
+  covers the CLI itself, the project's schema and the package ranges in one
+  plan — and stop.
 - The `intelligence-` skill prefix is **reserved** for upstream meta-skills.
 
 ## Steps
@@ -158,28 +158,32 @@ Only after step 6 reports a healthy project. The switch is **one-way** and
 rewrites the project's layout, so it happens only when the user says so in
 this conversation.
 
-**7a. Check the CLI is generally available.**
+**7a. Check what the CLI publishes.**
 
 ```
-npm view @ainova-systems/intelligence version
+npm view @ainova-systems/intelligence dist-tags --json
 ```
 
-If that fails, or the version carries a prerelease suffix (`-rc.N`, `-beta`,
-anything after a `-`), the CLI is not generally available yet: say so in one
-line, state that the vendored setup keeps working, and **stop here**. Do not
-offer the switch, and never install a prerelease on a real project.
+- A stable `latest` (a version with **no** suffix after a `-`) ⇒ proceed with
+  `@latest`.
+- Only a prerelease (`-rc.N`, `-beta`, …) ⇒ the CLI is not generally available
+  yet. Say so in one line, state that the vendored setup keeps working, and
+  **stop** — unless the user has explicitly asked for the release candidate in
+  this conversation, in which case proceed with `@next` and name it as a
+  release candidate every time you mention it. Never put a prerelease on a
+  project on your own initiative.
+- The command fails (offline, npm unreachable) ⇒ report and stop.
 
 **7b. Describe what would change, then ask.** Present it plainly:
 
-- `config.yaml` becomes `intelligence.yaml` at the repository root (the old
-  file is kept at `.intelligence/backup/config.yaml`).
+- `config.yaml` becomes `intelligence.yaml` at the repository root.
 - Declared `packs:` become `packages:`, keeping their pins; mirrored pack
   content is *copied* into a gitignored `.intelligence/` store, not refetched.
 - `intelligence.lock` is created and should be committed.
 - The vendored engine directory and the pack mirrors are deleted — the engine
   ships inside the npm package from then on.
-- Updates stop going through this skill: `intelligence update` moves packages,
-  `intelligence upgrade` moves the engine.
+- Updates stop going through this skill: one `intelligence update` covers the
+  CLI, the project's schema and its package ranges.
 
 Then ask for an explicit yes. **`--yes` does not cover this** — that flag only
 skips the diff confirmation in step 3, never this decision. No answer, a
@@ -187,45 +191,49 @@ hedged answer, or anything short of clear approval ⇒ do not proceed; leave the
 project on the vendored setup and say it can be done any time.
 
 **7c. Preconditions.** The working tree must be clean (`git status
---porcelain` empty) — `migrate` refuses otherwise, and the point is a
-single reviewable commit. If it is dirty, ask the user to commit or stash;
-never pass `--force` on their behalf.
+--porcelain` empty) — conversion refuses otherwise, and the point is a single
+reviewable commit. If it is dirty, ask the user to commit or stash; never pass
+`--force` on their behalf.
 
-**7d. Install and preview.**
+**7d. Install and preview.** `intelligence init` is the universal entry point:
+in an archived v1 project it *is* the conversion, and `--preview` stages and
+verifies the whole thing while writing nothing to the project.
 
 ```
-npm i -g @ainova-systems/intelligence@latest
+npm i -g @ainova-systems/intelligence@latest    # or @next, only if 7a said so
 intelligence --version
-intelligence migrate --dry-run
+intelligence init --preview
 ```
 
-`--dry-run` stages and verifies the whole conversion and writes nothing. Show
-the user the manifest it printed and any warning it raised. If it fails, stop
-and report — the project is untouched and still works.
+Show the user the manifest it printed and any warning it raised. If it fails,
+stop and report — the project is untouched and still works.
 
-**7e. Confirm once more, then migrate.**
+**7e. Confirm once more, then convert.**
 
 ```
-intelligence migrate
+intelligence init --apply
 ```
 
-It is transactional: the vendored engine, `config.yaml` and the mirrors are
-deleted only after a real sync of the new state reported `IS_STATUS=ok`. Any
-earlier failure rolls back to an untouched project.
+`--apply` converts without a second interactive prompt, which is correct here
+because the user has just approved the previewed plan. It is transactional:
+the vendored engine, `config.yaml` and the mirrors are replaced only after the
+staged state verified and a real sync of it succeeded. Any earlier failure
+leaves the project untouched.
 
 **7f. Verify the new setup.**
 
 ```
-intelligence doctor
+intelligence status --check
 intelligence sync
 ```
 
-`doctor` must exit 0. Confirm `intelligence.yaml` and `intelligence.lock` exist
-at the root, `.intelligence/` is gitignored, the vendored module is gone, and
-the generated outputs still contain the project's own rules and skills. Tell
-the user to review and commit the single diff, and that from here on updates
-are `intelligence update` / `intelligence upgrade` — this skill is no longer
-part of the project.
+`status --check` must exit 0 — it is the deep consistency pass (manifest/lock
+agreement, package content, SHA drift, stale schema, invalid sources). Confirm
+`intelligence.yaml` and `intelligence.lock` exist at the root, `.intelligence/`
+is gitignored, the vendored module is gone, and the generated outputs still
+contain the project's own rules and skills. Tell the user to review and commit
+the single diff, and that from here on updating is `intelligence update` —
+this skill is no longer part of the project.
 
 ## Notes
 

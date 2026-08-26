@@ -12,6 +12,15 @@ Update intelligence-sync: fetch the latest engine from https://github.com/ainova
 
 Since 0.10.2 the same prompt also offers the one-way move to the intelligence CLI — described first, performed only if you say yes.
 
+## [0.10.3] — 2026-08-26
+
+### Fixed
+
+- **The CLI switch named commands that no longer exist.** The v2 CLI consolidated its surface right after 0.10.2 shipped: converting an archived v1 project is now `intelligence init` (`--preview` stages and verifies, `--apply` converts), `doctor` became `status --check`, and `upgrade` folded into one `intelligence update`. Step 7 of `intelligence-update` still said `migrate` / `doctor` / `upgrade` and would have failed at the first command — harmlessly, since the step refuses to run while the CLI is a prerelease, but wrong.
+- Step 7 now reads both npm dist-tags: a stable `latest` proceeds; a prerelease-only channel stops unless the user explicitly asks for the release candidate, and it is named as one every time.
+
+No schema change — the stamp advances to 0.10.3 on update.
+
 ## [0.10.2] — 2026-08-26
 
 The final release of the vendored engine. It keeps working, this repository stays at its URL, and nothing changes on its own. Development continues in the **intelligence CLI** ([ainova-systems/intelligence](https://github.com/ainova-systems/intelligence)), and the update flow now walks the move there on your explicit approval.
