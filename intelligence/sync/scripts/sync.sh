@@ -275,11 +275,15 @@ warn_unsynced "$REPO_ROOT" "$CONFIG_FILE"
 report_model_drift "$CONFIG_FILE"
 
 # This is the final vendored line; development continues in the intelligence
-# CLI. One stderr line so IS_STATUS stdout parsing (skills, CI) is untouched,
-# and suppressible for pipelines. The move is the update skill's step 7 and
+# CLI. A short stderr block keeps IS_STATUS stdout parsing (skills, CI)
+# untouched and is suppressible for pipelines. The move is the update skill's step 7 and
 # needs your explicit approval — nothing here changes on its own.
 if [ -z "${IS_SUPPRESS_CLI_NOTE:-}" ]; then
-    echo "NOTE: this vendored engine is the final line and keeps working. Its successor is the intelligence CLI — tell your agent \"Update intelligence-sync\" to review the move." >&2
+    echo "NEXT: Intelligence Sync is now the archived vendored line. Its supported successor is:" >&2
+    echo "      https://github.com/ainova-systems/intelligence" >&2
+    echo "      Install the stable CLI: npm install -g @ainova-systems/intelligence@latest" >&2
+    echo "      To migrate now, tell your agent: \"Update intelligence-sync and migrate this project to the Intelligence CLI.\"" >&2
+    echo "      It will explain the one-way changes, run 'intelligence init --preview', and ask before applying them." >&2
 fi
 
 echo ""

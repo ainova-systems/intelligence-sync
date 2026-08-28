@@ -231,7 +231,9 @@ echo "             config.yaml only gains the engine's managed keys (sync_versio
 echo "  Next: bash $MODULE_NAME/scripts/sync.sh"
 if [ -z "${IS_SUPPRESS_CLI_NOTE:-}" ]; then
     echo "" >&2
-    echo "NOTE: this is the final vendored line — it keeps working, and this upstream stays where it is." >&2
-    echo "      Development continues in the intelligence CLI. To review the one-way move, tell your agent" >&2
-    echo "      \"Update intelligence-sync\" again: the update skill walks it with your explicit approval." >&2
+    echo "NEXT: Intelligence Sync is now the archived vendored line. Its supported successor is:" >&2
+    echo "      https://github.com/ainova-systems/intelligence" >&2
+    echo "      Install the stable CLI: npm install -g @ainova-systems/intelligence@latest" >&2
+    echo "      To migrate now, tell your agent: \"Update intelligence-sync again and migrate this project to the Intelligence CLI.\"" >&2
+    echo "      It will explain the one-way changes, run 'intelligence init --preview', and ask before applying them." >&2
 fi

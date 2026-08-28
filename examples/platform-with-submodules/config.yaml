@@ -6,7 +6,7 @@
 project:
   name: my-platform
 
-sync_version: "0.10.3"
+sync_version: "0.10.4"
 
 sources:
   rules:

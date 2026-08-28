@@ -150,7 +150,9 @@ bash <umbrella>/sync/scripts/sync.sh
 ```
 Relay any model-drift report. Summarize: versions before→after, the breaking
 changes applied, verification result, anything the user must act on. Clean up
-the temp clone.
+the temp clone. **Do not end with a passive sentence saying only that CLI
+migration was not performed or needs separate approval.** Continue through
+step 7 and make the migration offer actionable.
 
 ### 7. Offer the switch to the intelligence CLI — approval required
 
@@ -189,6 +191,20 @@ Then ask for an explicit yes. **`--yes` does not cover this** — that flag only
 skips the diff confirmation in step 3, never this decision. No answer, a
 hedged answer, or anything short of clear approval ⇒ do not proceed; leave the
 project on the vendored setup and say it can be done any time.
+
+The offer must name the successor, show where it lives and make the next action
+unmistakable. Use this shape (with the resolved stable/prerelease tag from 7a):
+
+> Intelligence Sync is now the archived vendored line. Its supported successor
+> is the [Intelligence CLI](https://github.com/ainova-systems/intelligence).
+> Install it with `npm install -g @ainova-systems/intelligence@latest`.
+> I can start the migration now by running `intelligence init --preview`; this
+> writes nothing and shows the complete one-way conversion plan. Would you like
+> me to install the CLI and run that preview now?
+
+Do not replace that question with "migration was not performed", "requires
+separate approval", or another status-only closing line. The user must be able
+to answer **yes** without having to discover another command or prompt.
 
 **7c. Preconditions.** The working tree must be clean (`git status
 --porcelain` empty) — conversion refuses otherwise, and the point is a single
