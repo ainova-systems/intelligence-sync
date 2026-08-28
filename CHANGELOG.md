@@ -18,6 +18,7 @@ Since 0.10.2 the same prompt also offers the one-way move to the intelligence CL
 
 - **Made the final CLI handoff actionable instead of passive.** Update and sync now link to the supported [Intelligence CLI](https://github.com/ainova-systems/intelligence), show `npm install -g @ainova-systems/intelligence@latest`, and give the exact agent request that starts migration. The update skill must actively ask whether to install the CLI and run the read-only `intelligence init --preview`; it may not end with only "migration was not performed" or "requires separate approval".
 - **Made the two-invocation bootstrap explicit.** An agent that begins on 0.10.1 or older is still executing the old update skill while 0.10.4 is installed, so that loaded procedure cannot acquire the new migration phase midway through its run. Its final handoff must tell the user to invoke `Update intelligence-sync again and migrate this project to the Intelligence CLI`; the second invocation loads the new skill, explains the one-way conversion, and asks before changing anything.
+- **Replaced active onboarding with the archive handoff.** The README and vendored INIT now direct new and existing projects to the stable CLI, explain the read-only preview and transactional application path, and retain the legacy updater only as the bridge for schemas older than `0.10.0`. Contribution guidance, issue and pull-request templates, and reference docs now redirect development to the successor repository.
 
 No schema change — the stamp advances to 0.10.4 on update.
 

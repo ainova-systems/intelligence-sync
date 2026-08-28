@@ -1,5 +1,7 @@
 # intelligence-sync: Writing a New Adapter
 
+> **Historical documentation.** Intelligence Sync is archived. Create and manage adapters with the supported [Intelligence CLI](https://github.com/ainova-systems/intelligence); this document describes only the frozen vendored engine.
+
 ## Overview
 
 An adapter transforms source prompts (from `intelligence/`) into an IDE-specific format. Each adapter is a single bash file, discovered by filename.

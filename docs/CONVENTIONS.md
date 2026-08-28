@@ -1,5 +1,7 @@
 # intelligence-sync: Conventions
 
+> **Historical documentation.** Intelligence Sync is archived. Current authoring, package and adapter conventions live in the supported [Intelligence CLI](https://github.com/ainova-systems/intelligence); this document describes only the frozen vendored engine.
+
 ## Choosing artifact type
 
 Three artifact types — each has a different intent and loading mechanism. Picking the right one is the first authoring decision.
